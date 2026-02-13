@@ -1,0 +1,146 @@
+import React from 'react';
+import { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+import Login from './components/Login';
+import Sidebar from './components/Sidebar';
+import Dashboard from './components/Dashboard';
+import Profile from './components/Profile';
+import Courses from './components/Courses';
+import VideoPlayer from './components/VideoPlayer';
+import Assignments from './components/Assignments';
+import AssignmentDetail from './components/AssignmentDetail';
+import Progress from './components/Progress';
+import DoubtResolution from './components/DoubtResolution';
+import MyCollection from './components/MyCollection';
+import Quiz from './components/Quiz';
+import { MagnifyingGlassIcon, BellIcon } from '@heroicons/react/24/outline';
+
+function App() {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Authenticate based on presence of JWT token
+    const token = localStorage.getItem('token');
+    setIsAuthenticated(Boolean(token));
+    setIsLoading(false);
+  }, []);
+
+  const handleLogin = (authStatus) => {
+    setIsAuthenticated(authStatus);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading EduPlatform...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <Router>
+        <Login onLogin={handleLogin} />
+        <Toaster position="top-right" />
+      </Router>
+    );
+  }
+
+  return (
+    <Router>
+      <div className="flex h-screen bg-gray-50 overflow-hidden">
+        <Sidebar 
+          isOpen={isSidebarOpen} 
+          onClose={() => setIsSidebarOpen(false)} 
+        />
+        
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Mobile Header */}
+          <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+            >
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <h1 className="text-lg font-bold text-indigo-600">EduPlatform</h1>
+            <div className="flex items-center space-x-2">
+              <button className="relative p-2">
+                <BellIcon className="h-5 w-5 text-gray-600" />
+                <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+              </button>
+              <img
+                src="https://ui-avatars.com/api/?name=John+Doe&background=random&size=32"
+                alt="Profile"
+                className="h-7 w-7 rounded-full"
+              />
+            </div>
+          </div>
+
+          {/* Desktop Top Navigation Bar */}
+          <div className="hidden lg:block bg-white border-b border-gray-200 px-6 py-3">
+            <div className="flex items-center flex-1">
+              <h1 className="text-xl font-bold text-indigo-600 mr-8">EduPlatform Dashboard</h1>
+              <div className="max-w-2xl w-full">
+                <div className="relative">
+                  <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search courses, doubts, or assessments..."
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center space-x-4 ml-6">
+                <button className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
+                  <BellIcon className="h-6 w-6 text-gray-600" />
+                  <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+                </button>
+                <img
+                  src="https://ui-avatars.com/api/?name=John+Doe&background=random&size=32"
+                  alt="Profile"
+                  className="h-8 w-8 rounded-full border-2 border-gray-200"
+                />
+              </div>
+            </div>
+          </div>
+          
+          {/* Main Content */}
+          <div className="flex-1 overflow-auto">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/courses" element={<Courses />} />
+            <Route path="/courses/topic/:topicId/video" element={<VideoPlayer />} />
+            <Route path="/assignments" element={<Assignments />} />
+            <Route path="/assignment/:assignmentId" element={<AssignmentDetail />} />
+            <Route path="/progress" element={<Progress />} />
+            <Route path="/doubts" element={<DoubtResolution />} />
+            <Route path="/collection" element={<MyCollection />} />
+            <Route path="/quiz" element={<Quiz />} />
+          </Routes>
+          </div>
+        </div>
+        
+        <Toaster position="top-right" />
+      </div>
+    </Router>
+  );
+}
+
+export default App;

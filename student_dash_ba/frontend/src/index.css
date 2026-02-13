@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-color: #4f46e5;
+  --secondary-color: #34d399;
+}
+
+body {
+  @apply bg-gray-50;
+}
+
+.sidebar-icon {
+  @apply h-5 w-5 text-gray-500;
+}
+
+.progress-ring {
+  @apply relative inline-flex items-center justify-center;
+}
+
+.card-hover {
+  @apply transition-transform duration-300 hover:scale-105;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Quiz animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease-out;
+}
