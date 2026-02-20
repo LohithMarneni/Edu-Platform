@@ -1,6 +1,15 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+
+// Ensure uploads directory exists (multer fails if it doesn't)
+const uploadDir = path.join(process.cwd(), 'uploads', 'content');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log('✅ Created uploads/content directory');
+}
+
 const {
   getContent,
   getContentItem,
@@ -21,7 +30,7 @@ const router = express.Router();
 // Multer configuration for file uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/content/');
+    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
     cb(null, Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname));
@@ -47,6 +56,26 @@ const upload = multer({
   }
 });
 
+// Specific routes BEFORE /:id to avoid 'upload' matching as id
+router.post('/upload', (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ success: false, message: 'File too large (max 10MB)' });
+      }
+    }
+    if (err) {
+      return res.status(400).json({ success: false, message: err.message || 'Upload failed' });
+    }
+    next();
+  });
+}, uploadFile);
+router.get('/stats/overview', getContentStats);
+router.post('/chapters', addChapter);
+router.post('/subtopics', addSubtopic);
+router.get('/chapters/:classId', getChapters);
+router.get('/student', getPublishedContentForStudent);
+
 router.route('/')
   .get(getContent)
   .post(validateContent, validate, createContent);
@@ -55,12 +84,5 @@ router.route('/:id')
   .get(getContentItem)
   .put(updateContent)
   .delete(deleteContent);
-
-router.post('/upload', upload.single('file'), uploadFile);
-router.get('/stats/overview', getContentStats);
-router.post('/chapters', addChapter);
-router.post('/subtopics', addSubtopic);
-router.get('/chapters/:classId', getChapters);
-router.get('/student', getPublishedContentForStudent);
 
 module.exports = router;

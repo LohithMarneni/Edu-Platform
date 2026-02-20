@@ -45,15 +45,25 @@ const Login = ({ onLogin }) => {
     try {
       const response = await apiService.login(formData.email, formData.password);
       
-      // Store token and user data
+      // Store token and user data with 1-day expiration
+      const expiryTime = Date.now() + (24 * 60 * 60 * 1000); // 24 hours from now
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
+      localStorage.setItem('authExpiry', expiryTime.toString());
       
       toast.success('Welcome to EduPlatform! 🎉');
       onLogin(true);
       navigate('/');
     } catch (error) {
-      toast.error(error.message || 'Login failed. Please try again.');
+      // Show validation errors if available
+      if (error.errors && Array.isArray(error.errors) && error.errors.length > 0) {
+        const errorMessages = error.errors.map(err => 
+          typeof err === 'string' ? err : err.message || err.msg || `${err.field || 'Field'}: Invalid value`
+        ).join(', ');
+        toast.error(errorMessages || error.message || 'Login failed. Please try again.');
+      } else {
+        toast.error(error.message || 'Login failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -77,15 +87,25 @@ const Login = ({ onLogin }) => {
     try {
       const response = await apiService.register(formData.fullName, formData.email, formData.password);
       
-      // Store token and user data
+      // Store token and user data with 1-day expiration
+      const expiryTime = Date.now() + (24 * 60 * 60 * 1000); // 24 hours from now
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
+      localStorage.setItem('authExpiry', expiryTime.toString());
       
       toast.success('Account created successfully! Welcome! 🎉');
       onLogin(true);
       navigate('/');
     } catch (error) {
-      toast.error(error.message || 'Signup failed. Please try again.');
+      // Show validation errors if available
+      if (error.errors && Array.isArray(error.errors) && error.errors.length > 0) {
+        const errorMessages = error.errors.map(err => 
+          typeof err === 'string' ? err : err.message || err.msg || `${err.field || 'Field'}: Invalid value`
+        ).join(', ');
+        toast.error(errorMessages || error.message || 'Signup failed. Please try again.');
+      } else {
+        toast.error(error.message || 'Signup failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }

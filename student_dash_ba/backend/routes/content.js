@@ -1,18 +1,18 @@
 const express = require('express');
-const { protect } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth');
 const { getContent, getContentItem } = require('../controllers/content');
 
 const router = express.Router();
 
 // @desc    Get content for student's enrolled classes
 // @route   GET /api/content
-// @access  Private
-router.get('/', protect, getContent);
+// @access  Private (student only)
+router.get('/', protect, authorize('student'), getContent);
 
 // @desc    Get single content item
 // @route   GET /api/content/:id
-// @access  Private
-router.get('/:id', protect, getContentItem);
+// @access  Private (student only)
+router.get('/:id', protect, authorize('student'), getContentItem);
 
 module.exports = router;
 

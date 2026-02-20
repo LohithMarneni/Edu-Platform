@@ -40,12 +40,18 @@ class ApiService {
           // clear invalid auth and force re-login
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          localStorage.removeItem('authExpiry');
           if (window.location.pathname !== '/') {
             window.location.href = '/';
           }
         }
       }
-      throw new Error(errorBody.message || 'Something went wrong');
+      
+      // Create error with validation details
+      const error = new Error(errorBody.message || 'Something went wrong');
+      error.errors = errorBody.errors || [];
+      error.status = response.status;
+      throw error;
     }
     return response.json();
   }
@@ -116,6 +122,15 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
+  }
+
+  // Profile endpoints
+  async getProfile() {
+    return this.get('/users/profile');
+  }
+
+  async updateProfile(profileData) {
+    return this.put('/users/profile', profileData);
   }
 
   // Student classes (mapped from teacher backend)

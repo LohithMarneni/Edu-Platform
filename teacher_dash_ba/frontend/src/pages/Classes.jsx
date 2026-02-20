@@ -81,24 +81,26 @@ const Classes = () => {
         const students = cls.students || [];
         const studentCount = cls.studentCount || students.length;
         
-        // Map recent students (first 3)
-        const recentStudents = students.slice(0, 3).map(student => {
-          const initials = student.name
-            .split(' ')
-            .map(n => n[0])
-            .join('')
-            .toUpperCase()
-            .slice(0, 2);
-          
-          const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-amber-500', 'bg-red-500'];
-          const colorIndex = students.indexOf(student) % colors.length;
-          
-          return {
-            name: student.name.split(' ')[0] + ' ' + student.name.split(' ')[1]?.[0] || '',
-            avatar: initials,
-            color: colors[colorIndex]
-          };
-        });
+        // Map recent students (first 3) - defensive for missing/invalid student data
+        const recentStudents = students.slice(0, 3)
+          .filter(s => s && (s.name || s.fullName || s.email))
+          .map((student, idx) => {
+            const name = student.name || student.fullName || student.email || 'Student';
+            const parts = String(name).split(' ').filter(Boolean);
+            const initials = parts.length >= 2
+              ? (parts[0][0] + parts[1][0]).toUpperCase().slice(0, 2)
+              : (name[0] || '?').toUpperCase();
+            const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-amber-500', 'bg-red-500'];
+            const displayName = parts.length >= 2
+              ? `${parts[0]} ${parts[1][0] || ''}`
+              : name;
+            
+            return {
+              name: displayName,
+              avatar: initials,
+              color: colors[idx % colors.length]
+            };
+          });
         
         // Determine AI tag based on stats
         let aiTag = { text: 'Active Class', type: 'info', icon: '🔥' };
@@ -144,13 +146,13 @@ const Classes = () => {
         
         return {
           id: cls._id,
-          name: cls.name,
-          subject: cls.subject,
-          grade: cls.grade,
+          name: cls.name || 'Unnamed Class',
+          subject: cls.subject || 'General',
+          grade: cls.grade || '',
           students: studentCount,
           assignments: cls.stats?.totalAssignments || 0,
           pendingDoubts: 0, // This would need to be fetched separately
-          lastActivity: new Date(cls.updatedAt).toLocaleDateString(),
+          lastActivity: cls.updatedAt ? new Date(cls.updatedAt).toLocaleDateString() : 'N/A',
           progress: progress,
           engagement: engagement,
           gradient: gradient,

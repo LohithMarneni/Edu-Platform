@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GraduationCap, Eye, EyeOff, Mail, Lock, User } from 'lucide-react';
 import apiService from '../services/api';
+import ErrorPopup from './ErrorPopup';
 
 const LoginPage = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -12,9 +13,39 @@ const LoginPage = ({ onLogin }) => {
     confirmPassword: ''
   });
   const [loading, setLoading] = useState(false);
+  const [errorPopup, setErrorPopup] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    errors: []
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Client-side validation
+    if (isLogin) {
+      if (!formData.email || !formData.password) {
+        setErrorPopup({
+          isOpen: true,
+          title: 'Missing Information',
+          message: 'Please fill in all required fields.',
+          errors: []
+        });
+        return;
+      }
+    } else {
+      if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
+        setErrorPopup({
+          isOpen: true,
+          title: 'Missing Information',
+          message: 'Please fill in all required fields.',
+          errors: []
+        });
+        return;
+      }
+    }
+    
     setLoading(true);
     
     try {
@@ -25,9 +56,11 @@ const LoginPage = ({ onLogin }) => {
         console.log('Login response:', response);
         console.log('Response keys:', Object.keys(response));
         
-        // Store token and user data
+        // Store token and user data with 1-day expiration
         if (response.token) {
+          const expiryTime = Date.now() + (24 * 60 * 60 * 1000); // 24 hours from now
           localStorage.setItem('token', response.token);
+          localStorage.setItem('authExpiry', expiryTime.toString());
           console.log('✅ Token stored in localStorage');
         } else {
           console.error('❌ No token in login response');
@@ -42,25 +75,58 @@ const LoginPage = ({ onLogin }) => {
         } else {
           console.error('❌ No user data in login response');
           console.error('Available keys in response:', Object.keys(response));
-          alert('Login successful but no user data received');
+          setErrorPopup({
+            isOpen: true,
+            title: 'Login Error',
+            message: 'Login successful but no user data received',
+            errors: []
+          });
         }
       } else {
         if (formData.password !== formData.confirmPassword) {
-          alert('Passwords do not match');
+          setErrorPopup({
+            isOpen: true,
+            title: 'Password Mismatch',
+            message: 'The passwords you entered do not match. Please try again.',
+            errors: []
+          });
           setLoading(false);
           return;
         }
         
         const response = await apiService.register(formData.name, formData.email, formData.password);
         
-        // Store token and user data
+        // Store token and user data with 1-day expiration
+        const expiryTime = Date.now() + (24 * 60 * 60 * 1000); // 24 hours from now
         localStorage.setItem('token', response.token);
         localStorage.setItem('user', JSON.stringify(response.user || response.data));
+        localStorage.setItem('authExpiry', expiryTime.toString());
         
         onLogin(response.user || response.data);
       }
     } catch (error) {
-      alert(error.message || 'Authentication failed. Please try again.');
+      // Extract error details
+      let errorMessage = error.message || 'Authentication failed. Please try again.';
+      let errors = [];
+      
+      // Check if error has validation errors array
+      if (error.errors && Array.isArray(error.errors)) {
+        errors = error.errors;
+        errorMessage = 'Please fix the following errors:';
+      } else if (error.status === 400) {
+        // Validation error from backend
+        errorMessage = 'Validation failed';
+        if (error.errors) {
+          errors = Array.isArray(error.errors) ? error.errors : [error.errors];
+        }
+      }
+      
+      setErrorPopup({
+        isOpen: true,
+        title: 'Authentication Error',
+        message: errorMessage,
+        errors: errors
+      });
     } finally {
       setLoading(false);
     }
@@ -231,6 +297,15 @@ const LoginPage = ({ onLogin }) => {
           <p>© 2024 TeacherHub. All rights reserved.</p>
         </div>
       </div>
+
+      {/* Error Popup */}
+      <ErrorPopup
+        isOpen={errorPopup.isOpen}
+        onClose={() => setErrorPopup({ ...errorPopup, isOpen: false })}
+        title={errorPopup.title}
+        message={errorPopup.message}
+        errors={errorPopup.errors}
+      />
     </div>
   );
 };

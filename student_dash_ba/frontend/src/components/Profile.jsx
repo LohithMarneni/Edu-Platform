@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PencilIcon, CameraIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import apiService from '../services/api';
 
 const Profile = () => {
   const [activeTab, setActiveTab] = useState('personal');
+  const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState(null);
   const [personalInfo, setPersonalInfo] = useState({
-    fullName: 'John Doe',
-    email: 'john.doe@example.com',
-    phone: '+1 234 567 890',
-    dob: '1990-01-01',
+    fullName: '',
+    email: '',
+    phone: '',
+    dob: '',
   });
 
   const [preferences, setPreferences] = useState({
@@ -19,6 +22,82 @@ const Profile = () => {
     language: 'English',
   });
 
+  // Fetch user data on component mount
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        setLoading(true);
+        const response = await apiService.getCurrentUser();
+        const user = response.data || response;
+        setUserData(user);
+        
+        // Populate personal info from user data
+        setPersonalInfo({
+          fullName: user.fullName || user.name || '',
+          email: user.email || '',
+          phone: user.profile?.phone || '',
+          dob: user.profile?.dateOfBirth 
+            ? new Date(user.profile.dateOfBirth).toISOString().split('T')[0]
+            : '',
+        });
+
+        // Populate preferences from user data if available
+        if (user.preferences) {
+          setPreferences({
+            darkMode: user.preferences.darkMode || false,
+            emailNotifications: user.preferences.emailNotifications !== false,
+            pushNotifications: user.preferences.pushNotifications !== false,
+            weeklyReports: user.preferences.weeklyReports !== false,
+            language: user.preferences.language || 'English',
+          });
+        }
+
+        // Try to get from localStorage as fallback
+        const storedUser = localStorage.getItem('user');
+        if (storedUser && !user.email) {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            setUserData(parsedUser);
+            setPersonalInfo({
+              fullName: parsedUser.fullName || parsedUser.name || '',
+              email: parsedUser.email || '',
+              phone: parsedUser.profile?.phone || '',
+              dob: parsedUser.profile?.dateOfBirth 
+                ? new Date(parsedUser.profile.dateOfBirth).toISOString().split('T')[0]
+                : '',
+            });
+          } catch (e) {
+            console.error('Failed to parse stored user:', e);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+        // Try to get from localStorage as fallback
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            setUserData(parsedUser);
+            setPersonalInfo({
+              fullName: parsedUser.fullName || parsedUser.name || '',
+              email: parsedUser.email || '',
+              phone: parsedUser.profile?.phone || '',
+              dob: parsedUser.profile?.dateOfBirth 
+                ? new Date(parsedUser.profile.dateOfBirth).toISOString().split('T')[0]
+                : '',
+            });
+          } catch (e) {
+            console.error('Failed to parse stored user:', e);
+          }
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, []);
+
   const [security, setSecurity] = useState({
     currentPassword: '',
     newPassword: '',
@@ -26,14 +105,110 @@ const Profile = () => {
     twoFactorEnabled: false,
   });
 
-  const handlePersonalInfoSubmit = (e) => {
+  const handlePersonalInfoSubmit = async (e) => {
     e.preventDefault();
-    toast.success('Profile updated successfully!');
+    try {
+      setLoading(true);
+
+      const payload = {
+        fullName: personalInfo.fullName,
+        profile: {
+          phone: personalInfo.phone || undefined,
+          dateOfBirth: personalInfo.dob || undefined,
+        },
+      };
+
+      const result = await apiService.updateProfile(payload);
+      const updatedUser = result?.data?.user || result?.data || result?.user || result;
+
+      if (updatedUser) {
+        setUserData((prev) => ({
+          ...(prev || {}),
+          ...updatedUser,
+          profile: updatedUser.profile || prev?.profile,
+          preferences: updatedUser.preferences || prev?.preferences,
+        }));
+
+        // Keep localStorage in sync so other parts of the app see updated details
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          try {
+            const parsed = JSON.parse(storedUser);
+            const merged = {
+              ...parsed,
+              fullName: updatedUser.fullName ?? parsed.fullName,
+              name: updatedUser.name ?? parsed.name,
+              email: updatedUser.email ?? parsed.email,
+              profile: {
+                ...(parsed.profile || {}),
+                ...(updatedUser.profile || {}),
+              },
+              preferences: {
+                ...(parsed.preferences || {}),
+                ...(updatedUser.preferences || {}),
+              },
+            };
+            localStorage.setItem('user', JSON.stringify(merged));
+          } catch (err) {
+            console.error('Failed to update stored user after profile save:', err);
+          }
+        }
+      }
+
+      toast.success('Profile updated successfully!');
+    } catch (err) {
+      console.error('Failed to update profile:', err);
+      toast.error(err.message || 'Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handlePreferencesSubmit = (e) => {
+  const handlePreferencesSubmit = async (e) => {
     e.preventDefault();
-    toast.success('Preferences saved successfully!');
+    try {
+      setLoading(true);
+
+      const payload = {
+        preferences: { ...preferences },
+      };
+
+      const result = await apiService.updateProfile(payload);
+      const updatedUser = result?.data?.user || result?.data || result?.user || result;
+
+      if (updatedUser) {
+        setUserData((prev) => ({
+          ...(prev || {}),
+          ...updatedUser,
+          profile: updatedUser.profile || prev?.profile,
+          preferences: updatedUser.preferences || prev?.preferences,
+        }));
+
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          try {
+            const parsed = JSON.parse(storedUser);
+            const merged = {
+              ...parsed,
+              preferences: {
+                ...(parsed.preferences || {}),
+                ...(updatedUser.preferences || {}),
+              },
+            };
+            localStorage.setItem('user', JSON.stringify(merged));
+          } catch (err) {
+            console.error('Failed to update stored user after preferences save:', err);
+          }
+        }
+      }
+
+      toast.success('Preferences saved successfully!');
+    } catch (err) {
+      console.error('Failed to update preferences:', err);
+      toast.error(err.message || 'Failed to save preferences');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSecuritySubmit = (e) => {
@@ -72,11 +247,30 @@ const Profile = () => {
     { action: 'Redeemed 50 points for a certificate', time: '1 week ago' },
   ];
 
-  const achievements = [
+  const achievements = userData?.achievements || [
     { name: 'Top Scorer', description: 'Achieved highest score in Mathematics', points: 100 },
     { name: 'Fast Learner', description: 'Completed 5 courses in a month', points: 50 },
     { name: 'Problem Solver', description: 'Solved 100 doubts', points: 75 },
   ];
+
+  // Get display name and avatar
+  const displayName = userData?.fullName || userData?.name || personalInfo.fullName || 'Student';
+  const displayEmail = userData?.email || personalInfo.email || '';
+  const avatarUrl = userData?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&size=128&background=4f46e5&color=fff`;
+  const totalPoints = userData?.stats?.totalPoints || userData?.totalPoints || 0;
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading profile...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
@@ -85,7 +279,7 @@ const Profile = () => {
         <div className="flex items-center space-x-6">
           <div className="relative">
             <img
-              src="https://ui-avatars.com/api/?name=John+Doe&size=128&background=random"
+              src={avatarUrl}
               alt="Profile"
               className="w-32 h-32 rounded-full"
             />
@@ -95,16 +289,18 @@ const Profile = () => {
           </div>
           <div className="flex-1">
             <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold text-gray-900">John Doe</h1>
+              <h1 className="text-2xl font-bold text-gray-900">{displayName}</h1>
               <button className="text-indigo-600 hover:text-indigo-700">
                 <PencilIcon className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-gray-600">Student</p>
-            <p className="text-gray-600">john.doe@example.com</p>
+            <p className="text-gray-600">{userData?.role === 'student' ? 'Student' : userData?.role || 'Student'}</p>
+            {displayEmail && <p className="text-gray-600">{displayEmail}</p>}
+            {userData?.profile?.grade && <p className="text-gray-600">Grade: {userData.profile.grade}</p>}
+            {userData?.profile?.school && <p className="text-gray-600">School: {userData.profile.school}</p>}
           </div>
           <div className="text-center">
-            <div className="text-3xl font-bold text-indigo-600">850</div>
+            <div className="text-3xl font-bold text-indigo-600">{totalPoints}</div>
             <div className="text-gray-600">Total Points</div>
           </div>
         </div>

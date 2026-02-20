@@ -14,7 +14,8 @@ import {
   Copy,
   CheckCircle,
   AlertCircle,
-  X
+  X,
+  Key
 } from 'lucide-react';
 import ClassOverview from '../components/ClassOverview';
 import ClassAssignments from '../components/ClassAssignments';
@@ -23,6 +24,7 @@ import ClassDoubts from '../components/ClassDoubts';
 import ClassReports from '../components/ClassReports';
 import ClassAITools from '../components/ClassAITools';
 import apiService from '../services/api';
+import ErrorPopup from '../components/ErrorPopup';
 
 const ClassDetail = () => {
   const { classId } = useParams();
@@ -40,6 +42,12 @@ const ClassDetail = () => {
   const [classData, setClassData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [errorPopup, setErrorPopup] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    errors: []
+  });
 
   // Fetch class data on mount
   useEffect(() => {
@@ -72,15 +80,25 @@ const ClassDetail = () => {
         setClassCode(response.data);
         setShowCodeModal(true);
       } else {
-        alert('Failed to generate class code');
+        setErrorPopup({
+          isOpen: true,
+          title: 'Failed to Generate Code',
+          message: response.message || 'Failed to generate class code. Please try again.',
+          errors: []
+        });
       }
     } catch (error) {
       console.error('Error generating class code:', error);
-      alert('Error generating class code');
+      setErrorPopup({
+        isOpen: true,
+        title: 'Error',
+        message: error.message || 'Error generating class code. Please try again.',
+        errors: error.errors || []
+      });
     }
   };
 
-  // Function to get existing class code
+  // Function to get existing class code (or generate if none exists)
   const getClassCode = async () => {
     try {
       const response = await apiService.getClassCode(classId);
@@ -89,11 +107,32 @@ const ClassDetail = () => {
         setClassCode(response.data);
         setShowCodeModal(true);
       } else {
-        alert('No class code found. Generate a new one.');
+        // If no code exists, offer to generate one
+        if (response.message && response.message.includes('No valid class code')) {
+          // Auto-generate if none exists
+          await generateClassCode();
+        } else {
+          setErrorPopup({
+            isOpen: true,
+            title: 'No Class Code',
+            message: response.message || 'No class code found. Click "Generate Class Code" to create one.',
+            errors: []
+          });
+        }
       }
     } catch (error) {
       console.error('Error getting class code:', error);
-      alert('Error getting class code');
+      // If error is 404 (no code), try to generate one
+      if (error.status === 404 || (error.message && error.message.includes('No valid class code'))) {
+        await generateClassCode();
+      } else {
+        setErrorPopup({
+          isOpen: true,
+          title: 'Error',
+          message: error.message || 'Error getting class code. Please try again.',
+          errors: error.errors || []
+        });
+      }
     }
   };
 
@@ -230,6 +269,14 @@ const ClassDetail = () => {
           </button>
           
           <button
+            onClick={generateClassCode}
+            className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors duration-200"
+          >
+            <Key className="w-4 h-4" />
+            <span>Generate Class Code</span>
+          </button>
+          
+          <button
             onClick={getClassCode}
             className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors duration-200"
           >
@@ -282,6 +329,15 @@ const ClassDetail = () => {
           </Routes>
         </div>
       </div>
+
+      {/* Error Popup */}
+      <ErrorPopup
+        isOpen={errorPopup.isOpen}
+        onClose={() => setErrorPopup({ ...errorPopup, isOpen: false })}
+        title={errorPopup.title}
+        message={errorPopup.message}
+        errors={errorPopup.errors}
+      />
 
       {/* Class Code Modal */}
       {showCodeModal && (

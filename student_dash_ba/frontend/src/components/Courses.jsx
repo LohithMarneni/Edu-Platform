@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import apiService from '../services/api';
 import {
   PlayCircleIcon,
@@ -27,66 +28,56 @@ const Courses = () => {
   const [classCode, setClassCode] = useState('');
   const [joinSuccess, setJoinSuccess] = useState(false);
 
-  // Fetch enrolled classes as "courses" for the student
-  useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        console.log('🔄 Fetching student classes from API...');
-        setLoading(true);
-        const response = await apiService.getStudentClasses();
-        console.log('📡 Classes API Response:', response);
-        
-        if (response.success) {
-          const classEntries = response.data || [];
-          console.log('✅ Classes fetched successfully:', classEntries.length, 'classes');
+  // Map API response to course cards
+  const mapClassEntriesToCourses = (classEntries) => {
+    return (classEntries || []).map((entry, index) => {
+      const cls = entry.class || entry;
+      const subject = cls.subject || 'Class';
+      const grade = cls.grade ? ` • Grade ${cls.grade}` : '';
+      const subjectColors = {
+        Mathematics: { color: 'bg-indigo-50', borderColor: 'border-indigo-100', iconColor: 'text-indigo-600' },
+        Science:     { color: 'bg-emerald-50', borderColor: 'border-emerald-100', iconColor: 'text-emerald-600' },
+        Physics:     { color: 'bg-violet-50', borderColor: 'border-violet-100', iconColor: 'text-violet-600' },
+        Chemistry:   { color: 'bg-cyan-50', borderColor: 'border-cyan-100', iconColor: 'text-cyan-600' },
+        English:     { color: 'bg-amber-50', borderColor: 'border-amber-100', iconColor: 'text-amber-600' },
+      };
+      const colors = subjectColors[subject] || { color: 'bg-sky-50', borderColor: 'border-sky-100', iconColor: 'text-sky-600' };
+      return {
+        _id: cls._id || entry._id || `class_${index}`,
+        classId: cls._id,
+        name: cls.name || 'Class',
+        description: `${subject}${grade}`,
+        subject,
+        totalLessons: 0,
+        progress: { overallProgress: 0, completedLessons: 0 },
+        icon: '📘',
+        color: colors.color,
+        borderColor: colors.borderColor,
+        iconColor: colors.iconColor,
+      };
+    });
+  };
 
-          // Map class entries from teacher backend to course cards
-          const mappedCourses = classEntries.map((entry, index) => {
-            const cls = entry.class || entry; // support both { class: {...} } and direct class
-            const subject = cls.subject || 'Class';
-            const grade = cls.grade ? ` • Grade ${cls.grade}` : '';
-
-            // Simple color mapping based on subject
-            const subjectColors = {
-              Mathematics: { color: 'bg-indigo-50', borderColor: 'border-indigo-100', iconColor: 'text-indigo-600' },
-              Science:     { color: 'bg-emerald-50', borderColor: 'border-emerald-100', iconColor: 'text-emerald-600' },
-              Physics:     { color: 'bg-violet-50', borderColor: 'border-violet-100', iconColor: 'text-violet-600' },
-              Chemistry:   { color: 'bg-cyan-50', borderColor: 'border-cyan-100', iconColor: 'text-cyan-600' },
-              English:     { color: 'bg-amber-50', borderColor: 'border-amber-100', iconColor: 'text-amber-600' },
-            };
-            const colors = subjectColors[subject] || { color: 'bg-sky-50', borderColor: 'border-sky-100', iconColor: 'text-sky-600' };
-
-            return {
-              _id: cls._id || entry._id || `class_${index}`,
-              classId: cls._id, // used to link content by class on backend
-              name: cls.name || 'Class',
-              description: `${subject}${grade}`,
-              subject,
-              totalLessons: 0,
-              progress: {
-                overallProgress: 0,
-                completedLessons: 0,
-              },
-              icon: '📘',
-              color: colors.color,
-              borderColor: colors.borderColor,
-              iconColor: colors.iconColor,
-            };
-          });
-
-          setCourses(mappedCourses);
-        } else {
-          console.error('❌ API returned error:', response.message);
-          setError('Failed to fetch classes');
-        }
-      } catch (err) {
-        console.error('❌ Error fetching classes:', err);
-        setError('Error loading classes');
-      } finally {
-        setLoading(false);
+  const fetchCourses = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await apiService.getStudentClasses();
+      if (response.success) {
+        const classEntries = response.data || [];
+        setCourses(mapClassEntriesToCourses(classEntries));
+      } else {
+        setError(response.message || 'Failed to fetch classes');
       }
-    };
+    } catch (err) {
+      console.error('Error fetching classes:', err);
+      setError('Error loading classes');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchCourses();
   }, []);
 
@@ -104,26 +95,38 @@ const Courses = () => {
 
   // Function to join class by code
   const joinClassByCode = async () => {
+    const code = (classCode || '').trim().toUpperCase().replace(/\s/g, '');
+    if (!code) {
+      toast.error('Please enter a class code');
+      return;
+    }
+
     try {
-      const response = await apiService.post('/classes/join', {
-        classCode: classCode.toUpperCase()
-      });
+      const response = await apiService.joinClassByCode(code);
       
       if (response.success) {
+        toast.success('Successfully joined the class! 🎉');
         setJoinSuccess(true);
         setTimeout(() => {
           setShowJoinModal(false);
           setJoinSuccess(false);
           setClassCode('');
-          // Refresh the courses list
-          window.location.reload();
-        }, 2000);
+          fetchCourses();
+        }, 1500);
       } else {
-        alert(response.message || 'Failed to join class');
+        toast.error(response.message || 'Failed to join class');
       }
     } catch (error) {
       console.error('Error joining class:', error);
-      alert('Error joining class');
+      // Show detailed error message
+      if (error.errors && Array.isArray(error.errors) && error.errors.length > 0) {
+        const errorMessages = error.errors.map(err => 
+          typeof err === 'string' ? err : err.message || err.msg
+        ).join(', ');
+        toast.error(errorMessages || error.message || 'Error joining class');
+      } else {
+        toast.error(error.message || 'Error joining class. Please check the code and try again.');
+      }
     }
   };
 

@@ -250,7 +250,7 @@ exports.addStudent = async (req, res, next) => {
       });
     }
 
-    // Create or find student
+    // Create or find student (Student.classes is [{ class, joinedAt, status }])
     let student = await Student.findOne({ email: req.body.email });
     
     if (!student) {
@@ -258,12 +258,14 @@ exports.addStudent = async (req, res, next) => {
         name: req.body.name,
         email: req.body.email,
         studentId: req.body.studentId || `STU${Date.now()}`,
-        classes: [classItem._id]
+        classes: [{ class: classItem._id, joinedAt: new Date(), status: 'active' }]
       });
     } else {
-      // Add class to student's classes if not already added
-      if (!student.classes.includes(classItem._id)) {
-        student.classes.push(classItem._id);
+      const alreadyInClass = student.classes.some(
+        c => c.class && c.class.toString() === classItem._id.toString()
+      );
+      if (!alreadyInClass) {
+        student.classes.push({ class: classItem._id, joinedAt: new Date(), status: 'active' });
         await student.save();
       }
     }
@@ -518,8 +520,11 @@ exports.joinClassByCode = async (req, res, next) => {
       }
     }
 
-    // Add student to class
-    if (!classItem.students.includes(studentRecord._id)) {
+    // Add student to class (students array holds Student refs)
+    const alreadyInClass = classItem.students.some(
+      id => id && id.toString() === studentRecord._id.toString()
+    );
+    if (!alreadyInClass) {
       classItem.students.push(studentRecord._id);
       classItem.studentCount = classItem.students.length;
       await classItem.save();

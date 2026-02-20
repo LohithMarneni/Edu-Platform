@@ -6,7 +6,7 @@ const crypto = require('crypto');
 // @access  Public
 exports.register = async (req, res, next) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
 
     // Check if user exists
     const existingUser = await User.findOne({ email });
@@ -17,12 +17,12 @@ exports.register = async (req, res, next) => {
       });
     }
 
-    // Create user
+    // Create user - force teacher role for this app
     const user = await User.create({
       name,
       email,
       password,
-      role: role || 'teacher'
+      role: 'teacher'
     });
 
     sendTokenResponse(user, 201, res);
@@ -76,6 +76,15 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
+      });
+    }
+
+    // Ensure only teacher accounts can log into the teacher app
+    if (user.role !== 'teacher') {
+      console.log('Non-teacher role attempted teacher login:', user.role);
+      return res.status(403).json({
+        success: false,
+        message: 'Please use the student portal to log in as a student.'
       });
     }
 

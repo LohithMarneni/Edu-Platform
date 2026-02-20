@@ -22,9 +22,33 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Authenticate based on presence of JWT token
+    // Authenticate based on presence of JWT token and expiration
     const token = localStorage.getItem('token');
-    setIsAuthenticated(Boolean(token));
+    const authExpiry = localStorage.getItem('authExpiry');
+    
+    // Check if auth has expired (1 day = 24 hours)
+    if (token && authExpiry) {
+      const expiryTime = parseInt(authExpiry, 10);
+      const now = Date.now();
+      
+      if (now > expiryTime) {
+        // Auth expired, clear it
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('authExpiry');
+        setIsAuthenticated(false);
+      } else {
+        setIsAuthenticated(true);
+      }
+    } else if (token) {
+      // Old token without expiry, clear it for security
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setIsAuthenticated(false);
+    } else {
+      setIsAuthenticated(false);
+    }
+    
     setIsLoading(false);
   }, []);
 
@@ -36,6 +60,7 @@ function App() {
     setIsAuthenticated(false);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('authExpiry');
   };
 
   if (isLoading) {

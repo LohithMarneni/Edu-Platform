@@ -13,6 +13,7 @@ require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const classRoutes = require('./routes/classes');
+const studentClassRoutes = require('./routes/studentClasses');
 const assignmentRoutes = require('./routes/assignments');
 const doubtRoutes = require('./routes/doubts');
 const contentRoutes = require('./routes/content');
@@ -21,7 +22,7 @@ const dashboardRoutes = require('./routes/dashboard');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
-const { protect } = require('./middleware/auth');
+const { protect, authorize } = require('./middleware/auth');
 const { protectSocket } = require('./middleware/auth');
 
 const app = express();
@@ -144,19 +145,26 @@ app.get('/api/health', (req, res) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/users', protect, userRoutes);
-app.use('/api/classes', protect, classRoutes);
+
+// Teacher-only protected routes
+app.use('/api/users', protect, authorize('teacher'), userRoutes);
+
+// Student class routes (accessible to authenticated users, must come before teacher routes)
+app.use('/api/classes', studentClassRoutes);
+
+// Teacher class routes (teacher-only)
+app.use('/api/classes', protect, authorize('teacher'), classRoutes);
 
 // Student-facing assignment routes (no auth - verified by email)
 app.use('/api/assignments/student', require('./routes/studentAssignments'));
 
 // Teacher assignment routes (protected)
-app.use('/api/assignments', protect, assignmentRoutes);
+app.use('/api/assignments', protect, authorize('teacher'), assignmentRoutes);
 
-app.use('/api/doubts', protect, doubtRoutes);
+app.use('/api/doubts', protect, authorize('teacher'), doubtRoutes);
 app.use('/api/content/student', studentContentRoutes);
-app.use('/api/content', protect, contentRoutes);
-app.use('/api/dashboard', protect, dashboardRoutes);
+app.use('/api/content', protect, authorize('teacher'), contentRoutes);
+app.use('/api/dashboard', protect, authorize('teacher'), dashboardRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

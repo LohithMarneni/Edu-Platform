@@ -91,8 +91,8 @@ const Layout = ({ children, user, onLogout }) => {
                 </span>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-900">{user?.name || 'John Smith'}</p>
-                <p className="text-xs text-gray-500">Math Teacher</p>
+                <p className="text-sm font-medium text-gray-900">{user?.name || user?.fullName || 'Teacher'}</p>
+                <p className="text-xs text-gray-500">{user?.profile?.subject || user?.role === 'teacher' ? 'Teacher' : ''}</p>
               </div>
             </div>
             <button

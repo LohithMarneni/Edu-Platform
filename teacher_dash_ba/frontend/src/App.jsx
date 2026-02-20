@@ -19,20 +19,41 @@ function App() {
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     const storedToken = localStorage.getItem('token');
+    const authExpiry = localStorage.getItem('authExpiry');
     
     console.log('App mount - checking auth...');
     console.log('Token exists:', !!storedToken);
     console.log('User exists:', !!storedUser);
     
-    if (storedUser && storedToken) {
-      try {
-        setUser(JSON.parse(storedUser));
-        console.log('User restored from localStorage');
-      } catch (error) {
-        console.error('Error parsing user data from localStorage:', error);
+    // Check if auth has expired (1 day = 24 hours)
+    if (storedToken && authExpiry) {
+      const expiryTime = parseInt(authExpiry, 10);
+      const now = Date.now();
+      
+      if (now > expiryTime) {
+        // Auth expired, clear it
+        console.log('Auth expired, clearing...');
         localStorage.removeItem('user');
         localStorage.removeItem('token');
+        localStorage.removeItem('authExpiry');
+        setUser(null);
+      } else if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+          console.log('User restored from localStorage');
+        } catch (error) {
+          console.error('Error parsing user data from localStorage:', error);
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
+          localStorage.removeItem('authExpiry');
+        }
       }
+    } else if (storedToken) {
+      // Old token without expiry, clear it for security
+      console.log('Old token without expiry found, clearing...');
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      setUser(null);
     } else {
       console.log('No stored auth data found');
     }
@@ -47,6 +68,7 @@ function App() {
     setUser(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
+    localStorage.removeItem('authExpiry');
   };
 
   // Show loading state while checking authentication

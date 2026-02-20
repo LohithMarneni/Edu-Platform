@@ -18,11 +18,12 @@ exports.register = async (req, res, next) => {
       });
     }
 
-    // Create user
+    // Create user - force student role for this app
     const user = await User.create({
       fullName,
       email,
-      password
+      password,
+      role: 'student'
     });
 
     // Generate tokens
@@ -94,6 +95,14 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
+      });
+    }
+
+    // Ensure only student accounts can log into the student app
+    if (user.role !== 'student') {
+      return res.status(403).json({
+        success: false,
+        message: 'Please use the teacher portal to log in as a teacher.'
       });
     }
 

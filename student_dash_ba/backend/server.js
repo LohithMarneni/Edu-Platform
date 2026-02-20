@@ -20,10 +20,11 @@ const dashboardRoutes = require('./routes/dashboard');
 const videoRoutes = require('./routes/videos');
 const assessmentRoutes = require('./routes/assessments');
 const contentRoutes = require('./routes/content');
+const classesRoutes = require('./routes/classes');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
-const { protect } = require('./middleware/auth');
+const { protect, authorize } = require('./middleware/auth');
 
 const app = express();
 
@@ -157,18 +158,21 @@ app.get('/api/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/users', protect, userRoutes);
-app.use('/api/courses', protect, courseRoutes);
-app.use('/api/quizzes', protect, quizRoutes);
-app.use('/api/doubts', protect, doubtRoutes);
-app.use('/api/notes', protect, noteRoutes);
-app.use('/api/progress', protect, progressRoutes);
-app.use('/api/collections', protect, collectionRoutes);
-app.use('/api/dashboard', protect, dashboardRoutes);
-app.use('/api/videos', protect, videoRoutes);
-app.use('/api/assessments', assessmentRoutes); // protect middleware is applied in the route file
-// Apply more lenient rate limiter to content routes
-app.use('/api/content', contentLimiter, contentRoutes);
+
+// Student-only protected routes
+app.use('/api/users', protect, authorize('student'), userRoutes);
+app.use('/api/courses', protect, authorize('student'), courseRoutes);
+app.use('/api/quizzes', protect, authorize('student'), quizRoutes);
+app.use('/api/doubts', protect, authorize('student'), doubtRoutes);
+app.use('/api/notes', protect, authorize('student'), noteRoutes);
+app.use('/api/progress', protect, authorize('student'), progressRoutes);
+app.use('/api/collections', protect, authorize('student'), collectionRoutes);
+app.use('/api/dashboard', protect, authorize('student'), dashboardRoutes);
+app.use('/api/videos', protect, authorize('student'), videoRoutes);
+app.use('/api/assessments', assessmentRoutes); // protect & role middleware applied in the route file
+app.use('/api/classes', protect, classesRoutes); // <-- Register classes routes with protect middleware
+// Apply more lenient rate limiter to content routes (student-only)
+app.use('/api/content', protect, authorize('student'), contentLimiter, contentRoutes);
 
 // Debug: Log all registered routes
 if (process.env.NODE_ENV === 'development') {

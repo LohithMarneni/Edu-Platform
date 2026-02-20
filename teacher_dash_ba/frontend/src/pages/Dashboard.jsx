@@ -57,10 +57,27 @@ const Dashboard = () => {
   const [schedule, setSchedule] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [user, setUser] = useState(null);
 
   // Fetch dashboard data on component mount
   useEffect(() => {
     fetchDashboardData();
+    // Fetch teacher profile
+    apiService.getCurrentUser().then(res => {
+      const userData = res.data || res;
+      setUser(userData);
+    }).catch(err => {
+      console.error('Failed to fetch user:', err);
+      // Try to get user from localStorage as fallback
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch (e) {
+          console.error('Failed to parse stored user:', e);
+        }
+      }
+    });
   }, []);
 
   const fetchDashboardData = async () => {
@@ -360,7 +377,7 @@ const Dashboard = () => {
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
             <div className="mb-4 lg:mb-0">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Welcome back, John! 👋
+                {`Welcome back, ${user?.name || user?.fullName || 'Teacher'}! 👋`}
               </h1>
               <p className="text-gray-600 text-lg">
                 {currentTime.toLocaleDateString('en-US', { 

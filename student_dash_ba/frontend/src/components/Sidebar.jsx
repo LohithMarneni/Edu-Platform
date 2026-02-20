@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   HomeIcon,
@@ -16,6 +16,21 @@ import {
 const Sidebar = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('user');
+    if (stored) {
+      try {
+        setUser(JSON.parse(stored));
+      } catch (e) {
+        console.error('Failed to parse user', e);
+      }
+    }
+  }, [location.pathname]);
+
+  const displayName = user?.fullName || user?.name || user?.email || 'Student';
+  const avatarUrl = user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=4f46e5&color=fff&size=32`;
 
   const handleBackClick = () => {
     navigate(-1); // Go back to previous page
@@ -94,12 +109,12 @@ const Sidebar = ({ isOpen, onClose }) => {
         <div className="p-4 border-t border-gray-200">
           <div className="flex items-center space-x-3">
             <img
-              src="https://ui-avatars.com/api/?name=John+Doe&background=4f46e5&color=fff&size=32"
+              src={avatarUrl}
               alt="Profile"
               className="w-8 h-8 rounded-full"
             />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">John Doe</p>
+              <p className="text-sm font-medium text-gray-900 truncate">{displayName}</p>
               <p className="text-xs text-gray-500 truncate">Student</p>
             </div>
           </div>

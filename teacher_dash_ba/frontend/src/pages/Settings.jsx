@@ -1,23 +1,148 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Bell, Shield, Palette, Globe, Save, Camera, Mail, Phone } from 'lucide-react';
+import apiService from '../services/api';
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('profile');
+  const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState(null);
   const [profileData, setProfileData] = useState({
-    firstName: 'John',
-    lastName: 'Smith',
-    email: 'john.smith@school.edu',
-    phone: '+1 (555) 123-4567',
-    subject: 'Mathematics',
-    bio: 'Passionate mathematics teacher with 10+ years of experience helping students excel in algebra, geometry, and calculus.'
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    subject: '',
+    bio: ''
   });
   const [showSaveMessage, setShowSaveMessage] = useState(false);
 
-  const handleSaveProfile = (e) => {
+  // Fetch user data on component mount
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        setLoading(true);
+        const response = await apiService.getCurrentUser();
+        const user = response.data || response;
+        setUserData(user);
+        
+        // Extract first and last name from full name
+        const fullName = user.name || user.fullName || '';
+        const nameParts = fullName.split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        
+        // Populate profile data from user data
+        setProfileData({
+          firstName,
+          lastName,
+          email: user.email || '',
+          phone: user.profile?.phone || '',
+          subject: user.profile?.subject || '',
+          bio: user.profile?.bio || user.bio || ''
+        });
+
+        // Try to get from localStorage as fallback
+        const storedUser = localStorage.getItem('user');
+        if (storedUser && !user.email) {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            setUserData(parsedUser);
+            const storedFullName = parsedUser.name || parsedUser.fullName || '';
+            const storedNameParts = storedFullName.split(' ');
+            setProfileData({
+              firstName: storedNameParts[0] || '',
+              lastName: storedNameParts.slice(1).join(' ') || '',
+              email: parsedUser.email || '',
+              phone: parsedUser.profile?.phone || '',
+              subject: parsedUser.profile?.subject || '',
+              bio: parsedUser.profile?.bio || parsedUser.bio || ''
+            });
+          } catch (e) {
+            console.error('Failed to parse stored user:', e);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+        // Try to get from localStorage as fallback
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            setUserData(parsedUser);
+            const storedFullName = parsedUser.name || parsedUser.fullName || '';
+            const storedNameParts = storedFullName.split(' ');
+            setProfileData({
+              firstName: storedNameParts[0] || '',
+              lastName: storedNameParts.slice(1).join(' ') || '',
+              email: parsedUser.email || '',
+              phone: parsedUser.profile?.phone || '',
+              subject: parsedUser.profile?.subject || '',
+              bio: parsedUser.profile?.bio || parsedUser.bio || ''
+            });
+          } catch (e) {
+            console.error('Failed to parse stored user:', e);
+          }
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, []);
+
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
-    // Simulate saving
-    setShowSaveMessage(true);
-    setTimeout(() => setShowSaveMessage(false), 3000);
+    try {
+      setLoading(true);
+
+      // Build payload for backend
+      const name = `${profileData.firstName} ${profileData.lastName}`.trim();
+      const payload = {
+        name: name || undefined,
+        firstName: profileData.firstName || undefined,
+        lastName: profileData.lastName || undefined,
+        phone: profileData.phone || undefined,
+        subject: profileData.subject || undefined,
+        bio: profileData.bio || undefined,
+      };
+
+      const response = await apiService.updateProfile(payload);
+      const updatedUser = response.data || response.user || response;
+
+      // Update local state
+      if (updatedUser) {
+        setUserData(updatedUser);
+      }
+
+      // Update cached user in localStorage so other screens (layout, dashboard) see changes
+      const storedUser = localStorage.getItem('user');
+      if (storedUser && updatedUser) {
+        try {
+          const parsed = JSON.parse(storedUser);
+          const merged = {
+            ...parsed,
+            name: updatedUser.name ?? parsed.name,
+            email: updatedUser.email ?? parsed.email,
+            profile: {
+              ...(parsed.profile || {}),
+              ...(updatedUser.profile || {}),
+            },
+          };
+          localStorage.setItem('user', JSON.stringify(merged));
+        } catch (err) {
+          console.error('Failed to update stored user after profile save:', err);
+        }
+      }
+
+      setShowSaveMessage(true);
+      setTimeout(() => setShowSaveMessage(false), 3000);
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+      alert(error.message || 'Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleInputChange = (field, value) => {
@@ -78,16 +203,30 @@ const Settings = () => {
                 {/* Profile Picture */}
                 <div className="flex items-center space-x-6 mb-6">
                   <div className="relative">
-                    <div className="w-20 h-20 bg-gray-300 rounded-full flex items-center justify-center">
-                      <span className="text-2xl font-medium text-gray-700">JS</span>
-                    </div>
+                    {userData?.avatar ? (
+                      <img
+                        src={userData.avatar}
+                        alt="Profile"
+                        className="w-20 h-20 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 bg-gray-300 rounded-full flex items-center justify-center">
+                        <span className="text-2xl font-medium text-gray-700">
+                          {(profileData.firstName?.[0] || '') + (profileData.lastName?.[0] || '') || 'T'}
+                        </span>
+                      </div>
+                    )}
                     <button className="absolute bottom-0 right-0 bg-blue-600 text-white p-1 rounded-full hover:bg-blue-700 transition-colors">
                       <Camera className="w-4 h-4" />
                     </button>
                   </div>
                   <div>
-                    <h3 className="text-lg font-medium text-gray-900">John Smith</h3>
-                    <p className="text-gray-600">Mathematics Teacher</p>
+                    <h3 className="text-lg font-medium text-gray-900">
+                      {profileData.firstName && profileData.lastName 
+                        ? `${profileData.firstName} ${profileData.lastName}`
+                        : userData?.name || userData?.fullName || 'Teacher'}
+                    </h3>
+                    <p className="text-gray-600">{profileData.subject || 'Teacher'}</p>
                     <button className="text-blue-600 hover:text-blue-700 text-sm font-medium mt-1">
                       Change Photo
                     </button>
@@ -100,7 +239,8 @@ const Settings = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
                     <input
                       type="text"
-                      defaultValue="John"
+                      value={profileData.firstName}
+                      onChange={(e) => handleInputChange('firstName', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
@@ -108,7 +248,8 @@ const Settings = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
                     <input
                       type="text"
-                      defaultValue="Smith"
+                      value={profileData.lastName}
+                      onChange={(e) => handleInputChange('lastName', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>

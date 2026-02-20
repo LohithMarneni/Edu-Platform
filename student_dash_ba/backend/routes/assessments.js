@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth');
 const { 
   getAssessments, 
   getAssessment, 
@@ -10,8 +10,8 @@ const {
 
 const router = express.Router();
 
-// Apply protect middleware to all routes
-router.use(protect);
+// Apply protect + role middleware to all routes
+router.use(protect, authorize('student'));
 
 // @desc    Get all assessments
 // @route   GET /api/assessments

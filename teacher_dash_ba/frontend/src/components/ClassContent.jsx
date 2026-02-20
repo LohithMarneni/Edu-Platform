@@ -45,6 +45,9 @@ const ClassContent = ({ classId, classData }) => {
   const [expandedSubtopics, setExpandedSubtopics] = useState([]);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedSubtopic, setSelectedSubtopic] = useState(null);
+  const [selectedContentType, setSelectedContentType] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [linkUrl, setLinkUrl] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddChapterModal, setShowAddChapterModal] = useState(false);
   const [showAddSubtopicModal, setShowAddSubtopicModal] = useState(false);
@@ -359,50 +362,135 @@ const ClassContent = ({ classId, classData }) => {
     }
   };
 
-  const handleUploadContent = async (subtopicId, contentType, file = null) => {
+  const handleContentTypeSelect = (contentType) => {
+    setSelectedContentType(contentType);
+    setSelectedFile(null);
+    setLinkUrl('');
+    
+    // For link type, show URL input immediately
+    if (contentType === 'link') {
+      // Will be handled in the modal
+    }
+    // For quiz type, allow creation without file
+    else if (contentType === 'quiz') {
+      // Will be handled in the modal
+    }
+    // For file-based types (pdf, image, video, audio), require file selection
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setSelectedFile(file);
+    }
+  };
+
+  const handleUploadContent = async () => {
+    if (!selectedSubtopic || !selectedContentType) {
+      alert('Please select a content type');
+      return;
+    }
+
+    // For file-based content types, require a file
+    const fileBasedTypes = ['pdf', 'image', 'video', 'audio', 'document'];
+    if (fileBasedTypes.includes(selectedContentType) && !selectedFile) {
+      alert(`Please select a file to upload for ${selectedContentType.toUpperCase()}`);
+      return;
+    }
+
+    // For link type, require URL
+    if (selectedContentType === 'link' && !linkUrl.trim()) {
+      alert('Please enter a URL');
+      return;
+    }
+
     try {
       setUploading(true);
 
+      // Find the current chapter and subtopic to get their IDs (defensive for empty state)
+      const chapters = organizedChapters || [];
+      const currentChapterData = selectedChapter ? chapters.find(ch => ch && ch.id === selectedChapter) : null;
+      const currentSubtopicData = currentChapterData?.subtopics?.find(st => st && st.id === selectedSubtopic);
+      
+      // Get chapter ID from the subtopic's chapterId or from selectedChapter
+      const chapterId = currentSubtopicData?.chapterId || selectedChapter || (currentChapterData?.id);
+
       const baseContentData = {
-        type: contentType,
+        type: selectedContentType,
         class: classId,
         subject: classData?.subject || selectedSubject,
         subtopic: {
-          id: subtopicId
+          id: selectedSubtopic
         },
         status: 'published',
         visibility: 'class-only'
       };
 
-      if (contentType === 'link') {
-        const url = prompt('Enter URL:');
-        if (!url) {
-          return;
+      // Add chapter reference if available
+      if (chapterId) {
+        const chapterItem = content.find(c => 
+          c.type === 'chapter' && (c.chapter?.id === chapterId || c._id?.toString() === chapterId)
+        );
+        if (chapterItem) {
+          baseContentData.chapter = {
+            id: chapterItem.chapter?.id || chapterId,
+            name: chapterItem.chapter?.name || chapterItem.title
+          };
+        } else {
+          // Fallback: use chapterId directly
+          baseContentData.chapter = {
+            id: chapterId
+          };
         }
-        baseContentData.link = { url, title: url };
-        baseContentData.title = url;
-      } else if (file) {
+      }
+
+      if (selectedContentType === 'link') {
+        baseContentData.link = { url: linkUrl.trim(), title: linkUrl.trim() };
+        baseContentData.title = linkUrl.trim();
+      } else if (selectedContentType === 'quiz') {
+        // For quiz, create with a default title - user can edit later
+        baseContentData.title = 'New Quiz';
+        baseContentData.description = 'Click to edit quiz details';
+      } else if (selectedFile) {
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', selectedFile);
 
         const uploadResponse = await apiService.uploadContentFile(formData);
         const uploadedFile = uploadResponse.data;
 
         baseContentData.file = uploadedFile;
-        baseContentData.title = uploadedFile.originalName || file.name;
+        baseContentData.title = uploadedFile.originalName || selectedFile.name;
       } else {
-        baseContentData.title = `New ${contentType}`;
+        // This shouldn't happen due to validation above, but fallback
+        alert('Please select a file to upload');
+        return;
       }
 
       await apiService.createContent(baseContentData);
       await fetchContent();
+      
+      // Reset state
       setShowUploadModal(false);
+      setSelectedContentType(null);
+      setSelectedFile(null);
+      setLinkUrl('');
     } catch (err) {
       console.error('Error uploading content:', err);
-      alert(err.message || 'Failed to upload content');
+      const msg = err.message || 'Failed to upload content';
+      const hint = msg === 'Failed to fetch' 
+        ? 'Check that the teacher backend is running on port 5001 and CORS is enabled.'
+        : '';
+      alert(msg + (hint ? '\n\n' + hint : ''));
     } finally {
       setUploading(false);
     }
+  };
+
+  const resetUploadModal = () => {
+    setShowUploadModal(false);
+    setSelectedContentType(null);
+    setSelectedFile(null);
+    setLinkUrl('');
   };
 
   const handleDeleteContent = async (contentId) => {
@@ -515,6 +603,9 @@ const ClassContent = ({ classId, classData }) => {
 
   const openUploadModal = (subtopicId) => {
     setSelectedSubtopic(subtopicId);
+    setSelectedContentType(null);
+    setSelectedFile(null);
+    setLinkUrl('');
     setShowUploadModal(true);
   };
 
@@ -840,37 +931,166 @@ const ClassContent = ({ classId, classData }) => {
           <div className="bg-white rounded-3xl p-8 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h3 className="text-2xl font-bold text-gray-900">Choose Upload Type</h3>
-                <p className="text-gray-600 mt-1">Select what you'd like to add to this subtopic</p>
+                <h3 className="text-2xl font-bold text-gray-900">
+                  {selectedContentType ? `Upload ${selectedContentType.toUpperCase()}` : 'Choose Upload Type'}
+                </h3>
+                <p className="text-gray-600 mt-1">
+                  {selectedContentType 
+                    ? 'Select a file or provide details' 
+                    : "Select what you'd like to add to this subtopic"}
+                </p>
               </div>
               <button 
-                onClick={() => setShowUploadModal(false)}
+                onClick={resetUploadModal}
                 className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-xl transition-all duration-200"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {uploadOptions.map((option) => {
-                const Icon = option.icon;
-                return (
-                  <div
-                    key={option.id}
-                    className={`${option.bgColor} rounded-2xl p-6 border-2 border-transparent hover:border-gray-200 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-lg group`}
-                    onClick={() => {
-                      handleUploadContent(selectedSubtopic, option.id);
-                    }}
-                  >
-                    <div className={`w-16 h-16 bg-gradient-to-r ${option.color} rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                      <Icon className="w-8 h-8 text-white" />
+            {!selectedContentType ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {uploadOptions.map((option) => {
+                  const Icon = option.icon;
+                  return (
+                    <div
+                      key={option.id}
+                      className={`${option.bgColor} rounded-2xl p-6 border-2 border-transparent hover:border-gray-200 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-lg group`}
+                      onClick={() => handleContentTypeSelect(option.id)}
+                    >
+                      <div className={`w-16 h-16 bg-gradient-to-r ${option.color} rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
+                        <Icon className="w-8 h-8 text-white" />
+                      </div>
+                      <h4 className={`font-bold text-lg ${option.textColor} mb-2`}>{option.name}</h4>
+                      <p className="text-sm text-gray-600">{option.description}</p>
                     </div>
-                    <h4 className={`font-bold text-lg ${option.textColor} mb-2`}>{option.name}</h4>
-                    <p className="text-sm text-gray-600">{option.description}</p>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* File-based content types */}
+                {['pdf', 'image', 'video', 'audio', 'document'].includes(selectedContentType) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select File to Upload
+                    </label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition-colors">
+                      <input
+                        type="file"
+                        onChange={handleFileSelect}
+                        accept={
+                          selectedContentType === 'pdf' ? '.pdf,.doc,.docx' :
+                          selectedContentType === 'image' ? '.jpg,.jpeg,.png,.gif' :
+                          selectedContentType === 'video' ? '.mp4,.avi,.mov' :
+                          selectedContentType === 'audio' ? '.mp3,.wav' :
+                          '.pdf,.doc,.docx,.ppt,.pptx'
+                        }
+                        className="hidden"
+                        id="file-upload"
+                        disabled={uploading}
+                      />
+                      <label
+                        htmlFor="file-upload"
+                        className="cursor-pointer flex flex-col items-center"
+                      >
+                        <Upload className="w-12 h-12 text-gray-400 mb-4" />
+                        {selectedFile ? (
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedFile(null);
+                                document.getElementById('file-upload').value = '';
+                              }}
+                              className="mt-2 text-sm text-red-600 hover:text-red-700"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-sm font-medium text-gray-700 mb-1">
+                              Click to select file
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {selectedContentType === 'pdf' && 'PDF, DOC, DOCX files'}
+                              {selectedContentType === 'image' && 'JPG, PNG, GIF files'}
+                              {selectedContentType === 'video' && 'MP4, AVI, MOV files'}
+                              {selectedContentType === 'audio' && 'MP3, WAV files'}
+                              {selectedContentType === 'document' && 'PDF, DOC, PPT files'}
+                            </p>
+                          </div>
+                        )}
+                      </label>
+                    </div>
                   </div>
-                );
-              })}
-            </div>
+                )}
+
+                {/* Link type */}
+                {selectedContentType === 'link' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Enter URL
+                    </label>
+                    <input
+                      type="url"
+                      value={linkUrl}
+                      onChange={(e) => setLinkUrl(e.target.value)}
+                      placeholder="https://example.com"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={uploading}
+                    />
+                  </div>
+                )}
+
+                {/* Quiz type */}
+                {selectedContentType === 'quiz' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+                    <p className="text-sm text-blue-800">
+                      A quiz will be created. You can add questions and configure it after creation.
+                    </p>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    onClick={resetUploadModal}
+                    className="flex-1 px-4 py-3 text-gray-600 hover:text-gray-800 transition-colors border border-gray-300 rounded-xl"
+                    disabled={uploading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleUploadContent}
+                    disabled={
+                      uploading ||
+                      (['pdf', 'image', 'video', 'audio', 'document'].includes(selectedContentType) && !selectedFile) ||
+                      (selectedContentType === 'link' && !linkUrl.trim())
+                    }
+                    className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                  >
+                    {uploading ? (
+                      <>
+                        <Loader className="w-5 h-5 animate-spin" />
+                        <span>Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-5 h-5" />
+                        <span>Upload</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -28,7 +28,7 @@ const classSchema = new mongoose.Schema({
   },
   students: [{
     type: mongoose.Schema.ObjectId,
-    ref: 'User'
+    ref: 'Student'
   }],
   studentCount: {
     type: Number,
