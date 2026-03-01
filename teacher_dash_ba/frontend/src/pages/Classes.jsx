@@ -62,17 +62,34 @@ const Classes = () => {
       }
       
       console.log('Token exists:', !!token);
-      const response = await apiService.getClasses();
-      console.log('API Response:', response);
       
-      if (!response.data || response.data.length === 0) {
+      // Fetch classes and assignments in parallel for accurate counts
+      const [classResponse, assignResponse] = await Promise.all([
+        apiService.getClasses(),
+        apiService.getAssignments().catch(() => ({ success: false, data: [] }))
+      ]);
+      
+      console.log('API Response:', classResponse);
+      
+      if (!classResponse.data || classResponse.data.length === 0) {
         console.log('No classes found in response');
         setClasses([]);
         return;
       }
       
+      // Build a map of classId → active assignment count from real assignment data
+      const assignmentCountByClass = {};
+      if (assignResponse.success && Array.isArray(assignResponse.data)) {
+        assignResponse.data.forEach(a => {
+          const cid = a.class?._id || a.class;
+          if (cid) {
+            assignmentCountByClass[cid] = (assignmentCountByClass[cid] || 0) + 1;
+          }
+        });
+      }
+      
       // Transform backend data to match UI format
-      const transformedClasses = response.data.map(cls => {
+      const transformedClasses = classResponse.data.map(cls => {
         // Calculate progress from stats
         const progress = Math.round(cls.stats?.averageScore || 0);
         const engagement = Math.round(cls.stats?.engagement || 0);
@@ -80,6 +97,9 @@ const Classes = () => {
         // Get students info
         const students = cls.students || [];
         const studentCount = cls.studentCount || students.length;
+        
+        // Use REAL assignment count from assignments list (not stale stats field)
+        const realAssignmentCount = assignmentCountByClass[String(cls._id)] || 0;
         
         // Map recent students (first 3) - defensive for missing/invalid student data
         const recentStudents = students.slice(0, 3)
@@ -150,8 +170,8 @@ const Classes = () => {
           subject: cls.subject || 'General',
           grade: cls.grade || '',
           students: studentCount,
-          assignments: cls.stats?.totalAssignments || 0,
-          pendingDoubts: 0, // This would need to be fetched separately
+          assignments: realAssignmentCount, // ← REAL count from assignments API
+          pendingDoubts: 0,
           lastActivity: cls.updatedAt ? new Date(cls.updatedAt).toLocaleDateString() : 'N/A',
           progress: progress,
           engagement: engagement,
@@ -165,6 +185,7 @@ const Classes = () => {
       
       setClasses(transformedClasses);
       console.log(`Successfully loaded ${transformedClasses.length} classes`);
+
     } catch (err) {
       console.error('Error fetching classes:', err);
       console.error('Error details:', {

@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeftIcon, PaperClipIcon, CloudArrowUpIcon, CheckCircleIcon, ClockIcon, DocumentTextIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, CheckCircleIcon, ClockIcon, DocumentTextIcon, StarIcon } from '@heroicons/react/24/outline';
 import apiService from '../services/api';
+
+// Type config: label, emoji, color classes
+const TYPE_CONFIG = {
+  Quiz:       { label: 'Quiz',       emoji: '🧠', bg: 'from-violet-500 to-purple-600',  badge: 'bg-violet-100 text-violet-700 border-violet-200' },
+  Homework:   { label: 'Homework',   emoji: '📘', bg: 'from-blue-500 to-cyan-600',      badge: 'bg-blue-100 text-blue-700 border-blue-200' },
+  Project:    { label: 'Project',    emoji: '🔬', bg: 'from-emerald-500 to-teal-600',   badge: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  Exam:       { label: 'Exam',       emoji: '📝', bg: 'from-red-500 to-rose-600',       badge: 'bg-red-100 text-red-700 border-red-200' },
+  Assignment: { label: 'Assignment', emoji: '📄', bg: 'from-indigo-500 to-purple-600',  badge: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+};
+const getTypeConfig = (type) => TYPE_CONFIG[type] || TYPE_CONFIG['Assignment'];
 
 const AssignmentDetail = () => {
   const { assignmentId } = useParams();
@@ -9,74 +19,92 @@ const AssignmentDetail = () => {
   const [assignment, setAssignment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submission, setSubmission] = useState(null);
+  const [answers, setAnswers] = useState({}); // { questionIndex: answerText }
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [draftFiles, setDraftFiles] = useState([]);
-  const [submittedFiles, setSubmittedFiles] = useState([]);
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [newFile, setNewFile] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [isQA, setIsQA] = useState(false);
 
-  // Fetch assignment data from API
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  // Get current student info from localStorage
+  const getStudentInfo = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      return {
+        email: user.email || '',
+        name: user.fullName || user.name || ''
+      };
+    } catch {
+      return { email: '', name: '' };
+    }
+  };
+
   useEffect(() => {
     if (!assignmentId) return;
     const fetchAssignment = async () => {
-      try {
-        setLoading(true);
-        console.log('🔄 Fetching assignment details for ID:', assignmentId);
-        const response = await apiService.getAssessment(assignmentId);
-        console.log('📡 Assignment API Response:', response);
-        
-        if (response.success) {
-          console.log('✅ Assignment fetched successfully:', response.data.title);
-          
-          // Transform the data to match component expectations
-          const transformedAssignment = {
-            ...response.data,
-            // Format due date
-            dueDate: new Date(response.data.dueDate).toLocaleDateString(),
-            // Ensure instructor is properly formatted
-            instructor: response.data.instructor?.name || response.data.instructor || 'Unknown Instructor',
-            // Add created/edited dates if not present
-            createdAt: response.data.createdAt ? new Date(response.data.createdAt).toLocaleDateString() : 'Unknown',
-            editedAt: response.data.updatedAt ? new Date(response.data.updatedAt).toLocaleDateString() : 'Unknown'
-          };
-          
-          setAssignment(transformedAssignment);
-          setSubmission(response.data.studentSubmission);
-          
-          // Handle files from both local and teacher backend submissions
-          let files = [];
-          if (response.data.studentSubmission) {
-            // Check if it's from teacher backend (attachments structure)
-            if (response.data.studentSubmission.attachments && response.data.studentSubmission.attachments.length > 0) {
-              // Transform teacher backend attachments to student frontend format
-              files = response.data.studentSubmission.attachments.map((att, idx) => ({
-                id: idx,
-                name: att.originalName || att.filename || `Attachment ${idx + 1}`,
-                type: att.mimetype || 'FILE',
-                url: att.path || att.url || '',
-                uploadedAt: att.uploadedAt || new Date().toLocaleString()
-              }));
-            } else if (response.data.studentSubmission.files && response.data.studentSubmission.files.length > 0) {
-              // Local assessment files
-              files = response.data.studentSubmission.files.map((f, idx) => ({
-                id: f.id || idx,
-                name: f.name || f.fileName || `File ${idx + 1}`,
-                type: f.type || f.fileType || 'FILE',
-                url: f.url || f.fileUrl || '',
-                uploadedAt: f.uploadedAt || new Date().toLocaleString()
-              }));
+      setLoading(true);
+      const student = getStudentInfo();
+
+      // Try teacher backend Q&A assignment first
+      if (student.email) {
+        try {
+          const res = await apiService.getStudentAssignmentFromTeacher(student.email, assignmentId);
+          if (res.success && res.data) {
+            const data = res.data;
+            const qaType = data.assignmentType === 'qa' || (data.questions && data.questions.length > 0);
+            setIsQA(qaType);
+            setAssignment({
+              ...data,
+              dueDate: new Date(data.dueDate).toLocaleDateString(),
+              instructor: data.teacher?.name || data.teacher || 'Teacher',
+              createdAt: data.createdAt ? new Date(data.createdAt).toLocaleDateString() : '',
+              points: data.totalMarks
+            });
+            const sub = data.studentSubmission;
+            setSubmission(sub || null);
+            // Pre-fill answers if already submitted
+            if (sub && sub.answers && sub.answers.length > 0) {
+              const prefilled = {};
+              sub.answers.forEach(a => { prefilled[a.questionIndex] = a.answer; });
+              setAnswers(prefilled);
             }
+            setLoading(false);
+            return;
           }
-          setSubmittedFiles(files);
-        } else {
-          console.error('❌ API returned error:', response.message);
-          throw new Error(response.message || 'Failed to fetch assignment');
+        } catch (err) {
+          console.warn('Teacher backend Q&A lookup failed, trying student backend:', err.message);
         }
-      } catch (error) {
-        console.error('❌ Error fetching assignment:', error);
-        // Show error state instead of falling back to mock data
+      }
+
+      // Fallback: try student backend (for regular assessments)
+      try {
+        const response = await apiService.getAssessment(assignmentId);
+        if (response.success) {
+          const data = response.data;
+          const qaType = data.assignmentType === 'qa' || (data.questions && data.questions.length > 0);
+          setIsQA(qaType);
+          setAssignment({
+            ...data,
+            dueDate: new Date(data.dueDate).toLocaleDateString(),
+            instructor: data.instructor?.name || data.instructor || 'Unknown',
+            createdAt: data.createdAt ? new Date(data.createdAt).toLocaleDateString() : '',
+            points: data.totalMarks || data.points
+          });
+          setSubmission(data.studentSubmission || null);
+          if (data.studentSubmission?.answers) {
+            const prefilled = {};
+            data.studentSubmission.answers.forEach(a => { prefilled[a.questionIndex] = a.answer; });
+            setAnswers(prefilled);
+          }
+        } else {
+          setAssignment(null);
+        }
+      } catch (err) {
+        console.error('Error fetching assignment:', err);
         setAssignment(null);
-        setSubmission(null);
       } finally {
         setLoading(false);
       }
@@ -85,192 +113,65 @@ const AssignmentDetail = () => {
     fetchAssignment();
   }, [assignmentId]);
 
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setNewFile(file);
-      setShowUploadModal(true);
-    }
+  const handleAnswerChange = (questionIndex, value) => {
+    setAnswers(prev => ({ ...prev, [questionIndex]: value }));
   };
 
-  const handleSubmitFile = async () => {
-    if (newFile) {
-      try {
-        const fileData = {
-          fileName: newFile.name,
-          fileUrl: URL.createObjectURL(newFile),
-          fileType: newFile.type.split('/')[1].toUpperCase()
-        };
-
-        await apiService.uploadAssessmentFile(assignmentId, fileData);
-
-        const fileInfo = {
-          id: Date.now(),
-          name: newFile.name,
-          type: newFile.type.split('/')[1].toUpperCase(),
-          url: URL.createObjectURL(newFile),
-          uploadedAt: new Date().toLocaleString()
-        };
-
-        if (submission?.status === 'submitted') {
-          setDraftFiles(prev => [...prev, fileInfo]);
-        } else {
-          setSubmittedFiles(prev => [...prev, fileInfo]);
-        }
-
-        setNewFile(null);
-        setShowUploadModal(false);
-      } catch (error) {
-        console.error('Error uploading file:', error);
-        // Still add to local state for demo
-        const fileInfo = {
-          id: Date.now(),
-          name: newFile.name,
-          type: newFile.type.split('/')[1].toUpperCase(),
-          url: URL.createObjectURL(newFile),
-          uploadedAt: new Date().toLocaleString()
-        };
-
-        if (submission?.status === 'submitted') {
-          setDraftFiles(prev => [...prev, fileInfo]);
-        } else {
-          setSubmittedFiles(prev => [...prev, fileInfo]);
-        }
-
-        setNewFile(null);
-        setShowUploadModal(false);
-      }
+  const handleSubmitQA = async () => {
+    const student = getStudentInfo();
+    if (!student.email) {
+      showToast('Could not determine your student email. Please re-login.', 'error');
+      return;
     }
-  };
+    const questionsArr = assignment?.questions || [];
+    const answersArray = questionsArr.map((_, idx) => ({
+      questionIndex: idx,
+      answer: answers[idx] || ''
+    }));
+    const unanswered = answersArray.filter(a => !a.answer.trim()).length;
+    if (unanswered > 0 && !window.confirm(`You have ${unanswered} unanswered question(s). Submit anyway?`)) return;
 
-  const handleTurnIn = async () => {
+    setIsSubmitting(true);
     try {
-      setIsSubmitting(true);
-      console.log('📤 Submitting assignment with files:', submittedFiles);
-      
-      const response = await apiService.submitAssessment(assignmentId, {
-        files: submittedFiles,
+      const res = await apiService.submitQAAssignment(assignmentId, {
+        studentEmail: student.email,
+        studentName: student.name,
+        answers: answersArray,
         status: 'submitted'
       });
-
-      console.log('✅ Submission response:', response);
-
-      // Show success message
-      alert('Assignment submitted successfully!');
-
-      // Refresh assignment data to get updated submission from backend
-      const refreshedResponse = await apiService.getAssessment(assignmentId);
-      if (refreshedResponse.success) {
-        const refreshedAssignment = refreshedResponse.data;
-        setSubmission(refreshedAssignment.studentSubmission);
-        
-        // Update files from refreshed submission
-        let files = [];
-        if (refreshedAssignment.studentSubmission) {
-          if (refreshedAssignment.studentSubmission.attachments && refreshedAssignment.studentSubmission.attachments.length > 0) {
-            files = refreshedAssignment.studentSubmission.attachments.map((att, idx) => ({
-              id: idx,
-              name: att.originalName || att.filename || `Attachment ${idx + 1}`,
-              type: att.mimetype || 'FILE',
-              url: att.path || att.url || '',
-              uploadedAt: att.uploadedAt || new Date().toLocaleString()
-            }));
-          } else if (refreshedAssignment.studentSubmission.files && refreshedAssignment.studentSubmission.files.length > 0) {
-            files = refreshedAssignment.studentSubmission.files.map((f, idx) => ({
-              id: f.id || idx,
-              name: f.name || f.fileName || `File ${idx + 1}`,
-              type: f.type || f.fileType || 'FILE',
-              url: f.url || f.fileUrl || '',
-              uploadedAt: f.uploadedAt || new Date().toLocaleString()
-            }));
-          }
-        }
-        setSubmittedFiles(files);
+      if (res.success) {
+        showToast('Answers submitted successfully! 🎉');
+        setSubmission({ ...res.data, status: 'submitted', answers: answersArray });
       } else {
-        // Fallback: update local state
-        setSubmission(prev => ({
-          ...prev,
-          status: 'submitted',
-          submittedAt: new Date().toLocaleString()
-        }));
+        showToast(res.message || 'Submission failed', 'error');
       }
-    } catch (error) {
-      console.error('❌ Error submitting assignment:', error);
-      // Show error message but don't logout
-      alert(`Failed to submit assignment: ${error.message}`);
-      // Don't update state on error - let user try again
+    } catch (err) {
+      showToast(err.message || 'Failed to submit', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDeleteFile = async (fileId) => {
-    try {
-      await apiService.deleteAssessmentFile(assignmentId, fileId);
-      setSubmittedFiles(prev => prev.filter(file => file.id !== fileId));
-    } catch (error) {
-      console.error('Error deleting file:', error);
-      // Still remove from local state for demo
-      setSubmittedFiles(prev => prev.filter(file => file.id !== fileId));
-    }
-  };
-
   const handleUnsubmit = async () => {
+    if (!window.confirm('This will unsubmit your answers so you can edit them. Continue?')) return;
+    const student = getStudentInfo();
+    setIsSubmitting(true);
     try {
-      setIsSubmitting(true);
-      console.log('📤 Unsubmitting assignment...');
-      
-      const response = await apiService.submitAssessment(assignmentId, {
-        files: submittedFiles,
+      const questionsArr = assignment?.questions || [];
+      const answersArray = questionsArr.map((_, idx) => ({
+        questionIndex: idx,
+        answer: answers[idx] || ''
+      }));
+      await apiService.submitQAAssignment(assignmentId, {
+        studentEmail: student.email,
+        studentName: student.name,
+        answers: answersArray,
         status: 'draft'
       });
-
-      console.log('✅ Unsubmit response:', response);
-
-      // Show success message
-      alert('Assignment unsubmitted successfully! You can now make changes.');
-
-      // Refresh assignment data to get updated submission from backend
-      const refreshedResponse = await apiService.getAssessment(assignmentId);
-      if (refreshedResponse.success) {
-        const refreshedAssignment = refreshedResponse.data;
-        setSubmission(refreshedAssignment.studentSubmission);
-        
-        // Update files from refreshed submission
-        let files = [];
-        if (refreshedAssignment.studentSubmission) {
-          if (refreshedAssignment.studentSubmission.attachments && refreshedAssignment.studentSubmission.attachments.length > 0) {
-            files = refreshedAssignment.studentSubmission.attachments.map((att, idx) => ({
-              id: idx,
-              name: att.originalName || att.filename || `Attachment ${idx + 1}`,
-              type: att.mimetype || 'FILE',
-              url: att.path || att.url || '',
-              uploadedAt: att.uploadedAt || new Date().toLocaleString()
-            }));
-          } else if (refreshedAssignment.studentSubmission.files && refreshedAssignment.studentSubmission.files.length > 0) {
-            files = refreshedAssignment.studentSubmission.files.map((f, idx) => ({
-              id: f.id || idx,
-              name: f.name || f.fileName || `File ${idx + 1}`,
-              type: f.type || f.fileType || 'FILE',
-              url: f.url || f.fileUrl || '',
-              uploadedAt: f.uploadedAt || new Date().toLocaleString()
-            }));
-          }
-        }
-        setSubmittedFiles(files);
-      } else {
-        // Fallback: update local state
-        setSubmission(prev => ({
-          ...prev,
-          status: 'draft',
-          submittedAt: null
-        }));
-      }
-    } catch (error) {
-      console.error('❌ Error unsubmitting assignment:', error);
-      alert(`Failed to unsubmit assignment: ${error.message}`);
-      // Still update local state to allow user to continue
       setSubmission(prev => ({ ...prev, status: 'draft' }));
+      showToast('Assignment unsubmitted. You can now edit your answers.');
+    } catch (err) {
+      showToast(err.message || 'Failed to unsubmit', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -279,7 +180,7 @@ const AssignmentDetail = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600" />
       </div>
     );
   }
@@ -289,11 +190,8 @@ const AssignmentDetail = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Assignment Not Found</h2>
-          <p className="text-gray-600 mb-6">The assignment you're looking for doesn't exist or you don't have access to it.</p>
-          <button
-            onClick={() => navigate('/assignments')}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
-          >
+          <p className="text-gray-600 mb-6">This assignment doesn't exist or you don't have access.</p>
+          <button onClick={() => navigate('/assignments')} className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
             Back to Assignments
           </button>
         </div>
@@ -301,262 +199,256 @@ const AssignmentDetail = () => {
     );
   }
 
+  const isSubmitted = submission?.status === 'submitted' || submission?.status === 'graded';
+  const isGraded = submission?.score !== undefined && submission?.score !== null;
+  const questions = assignment.questions || [];
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Header */}
-        <div className="mb-6">
-          <button
-            onClick={() => navigate('/assignments')}
-            className="flex items-center text-indigo-600 hover:text-indigo-800 mb-4"
-          >
-            <ArrowLeftIcon className="h-5 w-5 mr-2" />
-            Back to Assignments
-          </button>
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-5 py-3 rounded-xl shadow-lg text-white font-medium ${toast.type === 'error' ? 'bg-red-500' : 'bg-emerald-500'}`}>
+          {toast.msg}
         </div>
+      )}
+
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        {/* Back button */}
+        <button onClick={() => navigate('/assignments')} className="flex items-center text-indigo-600 hover:text-indigo-800 mb-6 font-medium">
+          <ArrowLeftIcon className="h-5 w-5 mr-2" />
+          Back to Assignments
+        </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Content */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              {/* Assignment Header */}
-              <div className="flex items-start justify-between mb-6">
-                <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
-                    <DocumentTextIcon className="h-6 w-6 text-white" />
+          <div className="lg:col-span-2 space-y-5">
+            {/* Assignment Header */}
+            <div className="bg-white rounded-2xl shadow-sm p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start gap-4">
+                  <div className={`w-12 h-12 bg-gradient-to-br ${getTypeConfig(assignment.type).bg} rounded-xl flex items-center justify-center flex-shrink-0 text-xl`}>
+                    {getTypeConfig(assignment.type).emoji}
                   </div>
                   <div>
-                    <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                      {assignment.title}
-                    </h1>
-                    <p className="text-gray-600">
-                      {typeof assignment.instructor === 'string' ? assignment.instructor : assignment.instructor?.name} • {assignment.createdAt}
-                      {assignment.editedAt !== assignment.createdAt && (
-                        <span className="text-gray-500"> (Edited {assignment.editedAt})</span>
-                      )}
+                    <h1 className="text-2xl font-bold text-gray-900 mb-1">{assignment.title}</h1>
+                    <p className="text-gray-500 text-sm">
+                      {assignment.instructor} • {assignment.createdAt}
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-lg font-semibold text-gray-900">
-                    {assignment.points} points
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    Due {assignment.dueDate}
-                  </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="text-xl font-bold text-gray-900">{assignment.points} pts</div>
+                  <div className="text-xs text-gray-500">Due {assignment.dueDate}</div>
                 </div>
               </div>
 
-              <hr className="mb-6" />
-
-              {/* Instructions */}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Instructions</h3>
-                <p className="text-gray-700 leading-relaxed">
-                  {assignment.instructions}
-                </p>
-              </div>
-
-              <hr className="mb-6" />
-
-              {/* Class Comments */}
-              <div>
-                <div className="flex items-center space-x-2 mb-4">
-                  <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium text-gray-600">👥</span>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Class comments</h3>
-                </div>
-                <button className="text-indigo-600 hover:text-indigo-800 font-medium">
-                  Add a class comment
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Your Work Card */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Your work</h3>
-                <span className={`text-sm px-2 py-1 rounded-full ${
-                  submission?.status === 'submitted' 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {submission?.status === 'submitted' ? 'Turned in' : 'Not turned in'}
+              {/* Status badges */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {isQA && (
+                  <span className={`px-3 py-1 text-xs font-bold rounded-full border ${getTypeConfig(assignment.type).badge}`}>
+                    {getTypeConfig(assignment.type).emoji} {getTypeConfig(assignment.type).label}
+                  </span>
+                )}
+                <span className={`px-3 py-1 text-xs font-bold rounded-full border ${isSubmitted ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>
+                  {isSubmitted ? '✓ Submitted' : 'Not Submitted'}
                 </span>
-              </div>
-
-              {/* Files */}
-              <div className="space-y-3 mb-4">
-                {submittedFiles.length > 0 ? (
-                  submittedFiles.map((file, idx) => {
-                    // Construct proper file URL - handle both url and path fields
-                    let fileUrl = '';
-                    const urlOrPath = file.url || file.path || '';
-                    
-                    if (urlOrPath) {
-                      if (urlOrPath.startsWith('http')) {
-                        fileUrl = urlOrPath;
-                      } else if (urlOrPath.startsWith('/uploads')) {
-                        fileUrl = `http://localhost:5001${urlOrPath}`;
-                      } else if (urlOrPath.startsWith('uploads')) {
-                        fileUrl = `http://localhost:5001/${urlOrPath}`;
-                      } else if (urlOrPath.startsWith('/')) {
-                        fileUrl = `http://localhost:5001${urlOrPath}`;
-                      } else {
-                        fileUrl = `http://localhost:5001/uploads/${urlOrPath}`;
-                      }
-                    }
-                    
-                    return (
-                      <div key={file.id || idx} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg group hover:bg-gray-100 transition-colors">
-                        <div className="w-10 h-10 bg-red-100 rounded flex items-center justify-center flex-shrink-0">
-                          <DocumentTextIcon className="h-5 w-5 text-red-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <button
-                            onClick={() => {
-                              if (fileUrl) {
-                                window.open(fileUrl, '_blank');
-                              } else {
-                                alert('File URL not available');
-                              }
-                            }}
-                            className="text-left w-full"
-                          >
-                            <p className="text-sm font-medium text-gray-900 truncate hover:text-indigo-600 transition-colors">
-                              {file.name}
-                            </p>
-                            <p className="text-xs text-gray-500">{file.type}</p>
-                          </button>
-                        </div>
-                        {submission?.status !== 'submitted' && (
-                          <button
-                            onClick={() => handleDeleteFile(file.id || idx)}
-                            className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 transition-all"
-                          >
-                            <XMarkIcon className="h-4 w-4" />
-                          </button>
-                        )}
-                        {fileUrl && (
-                          <button
-                            onClick={() => window.open(fileUrl, '_blank')}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors"
-                          >
-                            Open
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-4 text-gray-500">
-                    <p className="text-sm">No files uploaded yet</p>
-                  </div>
+                {isGraded && (
+                  <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full border border-blue-200">
+                    ⭐ Graded: {submission.score}/{assignment.points}
+                  </span>
                 )}
               </div>
 
-              {/* Upload Button */}
-              <div className="mb-4">
-                {submission?.status !== 'submitted' && (
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      className="hidden"
-                      onChange={handleFileUpload}
-                      accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-                    />
-                    <div className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
-                      <div className="text-center">
-                        <CloudArrowUpIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
-                      </div>
-                    </div>
-                  </label>
-                )}
-              </div>
+              <hr className="mb-4" />
 
-              {/* Action Buttons */}
-              <div className="space-y-2">
-                {submission?.status === 'submitted' ? (
-                  <button
-                    onClick={handleUnsubmit}
-                    disabled={isSubmitting}
-                    className="w-full px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-                  >
-                    {isSubmitting ? 'Unsubmitting...' : 'Unsubmit'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleTurnIn}
-                    disabled={submittedFiles.length === 0 || isSubmitting}
-                    className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-                  >
-                    {isSubmitting ? 'Turning in...' : 'Turn in'}
-                  </button>
-                )}
-              </div>
+              {assignment.description && (
+                <div className="mb-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">Description</h3>
+                  <p className="text-gray-700 leading-relaxed">{assignment.description}</p>
+                </div>
+              )}
 
-              {submission?.status === 'submitted' && (
-                <div className="mt-3 text-sm">
-                  {submission?.score !== undefined && (
-                    <div className="text-green-700 font-medium">Score: {submission.score}</div>
-                  )}
-                  {submission?.feedback && (
-                    <div className="text-gray-700">Feedback: {submission.feedback}</div>
-                  )}
+              {assignment.instructions && (
+                <div className="mb-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">Instructions</h3>
+                  <p className="text-gray-700 leading-relaxed">{assignment.instructions}</p>
                 </div>
               )}
             </div>
 
-            {/* Private Comments Card */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center space-x-2 mb-4">
-                <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                  <span className="text-sm font-medium text-gray-600">👤</span>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900">Private comments</h3>
+            {/* Q&A Questions Section */}
+            {isQA && questions.length > 0 && (
+              <div className="space-y-4">
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <span className="bg-indigo-600 text-white text-sm font-bold px-2.5 py-1 rounded-full">{questions.length}</span>
+                  Questions
+                </h2>
+
+                {questions.map((q, idx) => {
+                  const existingAnswer = submission?.answers?.find(a => a.questionIndex === idx);
+                  return (
+                    <div key={idx} className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-200">
+                      {/* Question header */}
+                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="bg-indigo-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">Q{idx + 1}</span>
+                          <span className="text-xs font-semibold text-indigo-700">{q.points || 0} marks</span>
+                        </div>
+                        {isSubmitted && existingAnswer?.answer && (
+                          <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                            <CheckCircleIcon className="w-4 h-4" /> Answered
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="p-5">
+                        <p className="text-gray-800 font-medium mb-4 leading-relaxed">{q.question}</p>
+
+                        {isSubmitted ? (
+                          // Read-only submitted view
+                          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                            <p className="text-xs font-semibold text-indigo-700 mb-2">Your Answer:</p>
+                            <p className="text-gray-800 text-sm whitespace-pre-wrap leading-relaxed">
+                              {existingAnswer?.answer || answers[idx] || <span className="text-gray-400 italic">No answer provided</span>}
+                            </p>
+                          </div>
+                        ) : (
+                          // Editable textarea
+                          <textarea
+                            value={answers[idx] || ''}
+                            onChange={e => handleAnswerChange(idx, e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none transition-colors placeholder-gray-400"
+                            rows={4}
+                            placeholder={`Write your answer for Question ${idx + 1} here...`}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <button className="text-indigo-600 hover:text-indigo-800 font-medium">
-                Add comment to {typeof assignment.instructor === 'string' ? assignment.instructor : assignment.instructor?.name}
-              </button>
+            )}
+
+            {/* Non-Q&A assignment fallback */}
+            {!isQA && (
+              <div className="bg-white rounded-2xl shadow-sm p-6">
+                <h3 className="font-semibold text-gray-900 mb-2">Submission</h3>
+                <p className="text-gray-600 text-sm">This assignment uses a different submission format. Check your course materials for details.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-5">
+            {/* Grade Card */}
+            {isGraded && (
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-5 shadow-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <StarIcon className="h-5 w-5 text-emerald-600" />
+                  <h3 className="font-bold text-gray-900">Your Grade</h3>
+                </div>
+                <div className="text-4xl font-black text-emerald-600 mb-1">
+                  {submission.score}<span className="text-lg font-semibold text-gray-400">/{assignment.points}</span>
+                </div>
+                <div className="text-sm text-gray-600 mb-1">
+                  {Math.round((submission.score / assignment.points) * 100)}%
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                  <div
+                    className="bg-emerald-500 h-2 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, (submission.score / assignment.points) * 100)}%` }}
+                  />
+                </div>
+                {submission.feedback && (
+                  <div className="bg-white border border-emerald-100 rounded-xl p-3">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">Teacher's Feedback:</p>
+                    <p className="text-sm text-gray-700 leading-relaxed">{submission.feedback}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Submission Status Card */}
+            <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-900">Your Work</h3>
+                <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${isSubmitted ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>
+                  {isSubmitted ? 'Turned In' : 'Not Turned In'}
+                </span>
+              </div>
+
+              {isQA && (
+                <div className="mb-4">
+                  <p className="text-xs text-gray-500 mb-3">
+                    {isSubmitted
+                      ? `${submission?.answers?.filter(a => a.answer?.trim()).length || Object.values(answers).filter(v => v.trim()).length} of ${questions.length} questions answered`
+                      : `${Object.values(answers).filter(v => v.trim()).length} of ${questions.length} questions answered`
+                    }
+                  </p>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div
+                      className="bg-indigo-500 h-1.5 rounded-full transition-all"
+                      style={{ width: `${questions.length ? (Object.values(answers).filter(v => v.trim()).length / questions.length) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {isSubmitted ? (
+                  <button
+                    onClick={handleUnsubmit}
+                    disabled={isSubmitting}
+                    className="w-full px-4 py-2.5 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50 transition-colors font-semibold text-sm"
+                  >
+                    {isSubmitting ? 'Processing...' : 'Unsubmit'}
+                  </button>
+                ) : isQA ? (
+                  <button
+                    onClick={handleSubmitQA}
+                    disabled={isSubmitting}
+                    className="w-full px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors font-semibold text-sm shadow-sm"
+                  >
+                    {isSubmitting ? 'Submitting...' : 'Submit Answers'}
+                  </button>
+                ) : null}
+              </div>
+
+              {isSubmitted && !isGraded && (
+                <div className="mt-3 flex items-center gap-2 text-amber-600">
+                  <ClockIcon className="h-4 w-4" />
+                  <p className="text-xs font-medium">Waiting for teacher to grade</p>
+                </div>
+              )}
+            </div>
+
+            {/* Assignment Info Card */}
+            <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-200">
+              <h3 className="font-bold text-gray-900 mb-3">Details</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Due Date</span>
+                  <span className="font-medium text-gray-800">{assignment.dueDate}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Total Marks</span>
+                  <span className="font-medium text-gray-800">{assignment.points}</span>
+                </div>
+                {questions.length > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Questions</span>
+                    <span className="font-medium text-gray-800">{questions.length}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Type</span>
+                  <span className="font-medium text-gray-800">{isQA ? 'Q&A' : assignment.type || 'Assignment'}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-
-      {/* Upload Modal */}
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Upload File</h3>
-            <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-2">File: {newFile?.name}</p>
-              <p className="text-xs text-gray-500">Size: {(newFile?.size / 1024 / 1024).toFixed(2)} MB</p>
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => {
-                  setNewFile(null);
-                  setShowUploadModal(false);
-                }}
-                className="flex-1 px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmitFile}
-                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-              >
-                Upload
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -490,6 +490,53 @@ class ApiService {
   async getContentItem(contentId) {
     return this.get(`/content/${contentId}`);
   }
+
+  // ── Teacher-Backend Assignment methods (port 5001) ──
+  // These call the TEACHER backend directly for Q&A assignment flow.
+  get teacherBaseURL() {
+    return 'http://localhost:5001/api';
+  }
+
+  async getStudentAssignmentsFromTeacher(email) {
+    const encoded = encodeURIComponent(email);
+    const ts = Date.now(); // cache buster
+    const response = await fetch(`${this.teacherBaseURL}/assignments/student/${encoded}?_t=${ts}`, {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to fetch assignments from teacher backend');
+    }
+    return response.json();
+  }
+
+  async getStudentAssignmentFromTeacher(email, assignmentId) {
+    const encoded = encodeURIComponent(email);
+    const ts = Date.now(); // cache buster
+    const response = await fetch(`${this.teacherBaseURL}/assignments/student/${encoded}/${assignmentId}?_t=${ts}`, {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to fetch assignment from teacher backend');
+    }
+    return response.json();
+  }
+
+  async submitQAAssignment(assignmentId, data) {
+    // data: { studentEmail, studentName, answers: [{ questionIndex, answer }] }
+    const response = await fetch(`${this.teacherBaseURL}/assignments/student/submit/${assignmentId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to submit assignment');
+    }
+    return response.json();
+  }
 }
 
 export default new ApiService();
+

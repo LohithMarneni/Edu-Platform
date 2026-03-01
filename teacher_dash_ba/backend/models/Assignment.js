@@ -19,7 +19,7 @@ const assignmentSchema = new mongoose.Schema({
   },
   assignmentType: {
     type: String,
-    enum: ['text', 'upload', 'quiz'],
+    enum: ['text', 'upload', 'quiz', 'qa'],
     default: 'text'
   },
   class: {
@@ -83,7 +83,17 @@ const assignmentSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     },
+    status: {
+      type: String,
+      enum: ['draft', 'submitted', 'graded'],
+      default: 'submitted'
+    },
     content: String,
+    // For Q&A assignments: array of { questionIndex, answer }
+    answers: [{
+      questionIndex: { type: Number, required: true },
+      answer: { type: String, default: '' }
+    }],
     attachments: [{
       filename: String,
       originalName: String,

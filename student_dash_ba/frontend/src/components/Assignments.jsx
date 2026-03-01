@@ -23,28 +23,52 @@ const Assignments = () => {
     const fetchAssignments = async () => {
       try {
         setLoading(true);
-        console.log('🔄 Fetching assignments from API...');
-        const response = await apiService.getAssessments();
-        console.log('📡 Assignments API Response:', response);
-        
-        if (response.success) {
-          console.log('✅ Assignments fetched successfully:', Object.keys(response.data).length, 'subjects');
-          setSubjects(response.data);
-          
-          // Calculate statistics
-          const allAssignments = Object.values(response.data).flat();
-          const completedCount = allAssignments.filter(a => a.studentStatus === 'submitted').length;
-          const pendingCount = allAssignments.filter(a => a.studentStatus === 'pending').length;
-          
-          setStatistics({
-            averageScore: 85, // This would come from actual grade data
-            completed: completedCount,
-            pending: pendingCount
-          });
-        } else {
-          console.error('❌ API returned error:', response.message);
-          setSubjects({});
+
+        // Get student email from localStorage
+        let studentEmail = '';
+        try {
+          const user = JSON.parse(localStorage.getItem('user') || '{}');
+          studentEmail = user.email || '';
+        } catch {}
+
+        // Fetch from both backends in parallel
+        const [studentRes, teacherRes] = await Promise.allSettled([
+          apiService.getAssessments(),
+          studentEmail ? apiService.getStudentAssignmentsFromTeacher(studentEmail) : Promise.resolve({ success: false, data: {} })
+        ]);
+
+        let mergedSubjects = {};
+
+        // Merge student backend assessments
+        if (studentRes.status === 'fulfilled' && studentRes.value?.success) {
+          mergedSubjects = { ...studentRes.value.data };
         }
+
+        // Merge Q&A assignments from teacher backend
+        if (teacherRes.status === 'fulfilled' && teacherRes.value?.success) {
+          const teacherData = teacherRes.value.data || {};
+          Object.entries(teacherData).forEach(([subject, assList]) => {
+            if (!mergedSubjects[subject]) mergedSubjects[subject] = [];
+            // Only add teacher assignments not already present
+            assList.forEach(ta => {
+              const exists = mergedSubjects[subject].some(sa => sa._id === ta._id);
+              if (!exists) mergedSubjects[subject].push({ ...ta, fromTeacher: true });
+            });
+          });
+        }
+
+        setSubjects(mergedSubjects);
+
+        // Calculate statistics
+        const allAssignments = Object.values(mergedSubjects).flat();
+        const completedCount = allAssignments.filter(a => a.studentStatus === 'submitted' || a.studentStatus === 'graded').length;
+        const pendingCount = allAssignments.filter(a => a.studentStatus === 'pending').length;
+        const gradedAssignments = allAssignments.filter(a => a.studentSubmission?.score !== undefined);
+        const avgScore = gradedAssignments.length > 0
+          ? Math.round(gradedAssignments.reduce((sum, a) => sum + (Number(a.studentSubmission.score) / Number(a.totalMarks) * 100), 0) / gradedAssignments.length)
+          : 0;
+
+        setStatistics({ averageScore: avgScore || 0, completed: completedCount, pending: pendingCount });
       } catch (error) {
         console.error('❌ Error fetching assignments:', error);
         setSubjects({});
@@ -142,15 +166,29 @@ const Assignments = () => {
                             <DocumentTextIcon className="h-5 w-5 text-indigo-600" />
                             <h3 className="text-lg font-medium text-gray-900">{assignment.title}</h3>
                             <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                              assignment.studentStatus === 'submitted' 
+                              assignment.studentStatus === 'graded'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : assignment.studentStatus === 'submitted' || assignment.studentStatus === 'graded'
                                 ? 'bg-green-100 text-green-800' 
                                 : assignment.studentStatus === 'draft'
                                 ? 'bg-yellow-100 text-yellow-800'
                                 : 'bg-gray-100 text-gray-800'
                             }`}>
-                              {assignment.studentStatus === 'submitted' ? 'Submitted' : 
+                              {assignment.studentStatus === 'graded' ? '⭐ Graded' :
+                               assignment.studentStatus === 'submitted' ? 'Submitted' : 
                                assignment.studentStatus === 'draft' ? 'Draft' : 'Pending'}
                             </span>
+                            {(assignment.assignmentType === 'qa' || (assignment.questions && assignment.questions.length > 0)) && (() => {
+                              const typeEmoji = { Quiz: '🧠', Homework: '📘', Project: '🔬', Exam: '📝', Assignment: '📄' };
+                              const typeBadge = { Quiz: 'bg-violet-100 text-violet-700', Homework: 'bg-blue-100 text-blue-700', Project: 'bg-emerald-100 text-emerald-700', Exam: 'bg-red-100 text-red-700', Assignment: 'bg-indigo-100 text-indigo-700' };
+                              const t = assignment.type || 'Assignment';
+                              return <span className={`px-2 py-0.5 ${typeBadge[t] || typeBadge.Assignment} text-xs font-semibold rounded-full`}>{typeEmoji[t] || '📄'} {t}</span>;
+                            })()}
+                            {assignment.studentSubmission?.score !== undefined && (
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">
+                                ⭐ {assignment.studentSubmission.score}/{assignment.totalMarks}
+                              </span>
+                            )}
                           </div>
                           <p className="text-gray-600 text-sm mb-2">{assignment.description}</p>
                           <div className="flex items-center space-x-4 text-sm text-gray-500">

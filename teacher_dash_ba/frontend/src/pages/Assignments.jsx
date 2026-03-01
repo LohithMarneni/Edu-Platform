@@ -1,634 +1,773 @@
-import React, { useState } from 'react';
-import { Plus, FileText, Clock, CheckCircle, Users, Search, Filter, ChevronDown, Trophy, AlertCircle, Calendar, MoreHorizontal, Eye, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, FileText, Clock, CheckCircle, Users, Search, Trophy, AlertCircle, MoreHorizontal, X, ChevronDown, Trash2, PlusCircle, Eye, Star, MessageSquare } from 'lucide-react';
+import apiService from '../services/api';
+
+const TYPE_CONFIG = {
+  Quiz:       { emoji: '🧠', bg: 'from-violet-500 to-purple-600',  badge: 'bg-violet-100 text-violet-700 border border-violet-200' },
+  Homework:   { emoji: '📘', bg: 'from-blue-500 to-cyan-600',      badge: 'bg-blue-100 text-blue-700 border border-blue-200' },
+  Project:    { emoji: '🔬', bg: 'from-emerald-500 to-teal-600',   badge: 'bg-emerald-100 text-emerald-700 border border-emerald-200' },
+  Exam:       { emoji: '📝', bg: 'from-red-500 to-rose-600',       badge: 'bg-red-100 text-red-700 border border-red-200' },
+  Assignment: { emoji: '📄', bg: 'from-indigo-500 to-purple-600',  badge: 'bg-indigo-100 text-indigo-700 border border-indigo-200' },
+};
+const tc = (type) => TYPE_CONFIG[type] || TYPE_CONFIG['Assignment'];
 
 const Assignments = () => {
   const [activeTab, setActiveTab] = useState('active');
   const [selectedClass, setSelectedClass] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showGradeModal, setShowGradeModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [assignments, setAssignments] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [gradeLoading, setGradeLoading] = useState(false);
+  const [submissions, setSubmissions] = useState([]);
+  const [gradingData, setGradingData] = useState({});
+  const [savingGrade, setSavingGrade] = useState('');
+  const [createStep, setCreateStep] = useState(1); // 1=details, 2=questions
+  const [toast, setToast] = useState(null);
+
   const [newAssignment, setNewAssignment] = useState({
     title: '',
     type: 'Assignment',
-    class: 'all',
+    assignmentType: 'qa',
+    class: '',
     dueDate: '',
     description: '',
-    totalMarks: 100
+    instructions: '',
+    totalMarks: 100,
+    questions: [{ question: '', points: 10 }]
   });
-  const [assignments, setAssignments] = useState([
-    {
-      id: 1,
-      title: 'Algebra Quiz - Chapter 5',
-      class: '8A',
-      className: 'Class 8A',
-      type: 'Quiz',
-      dueDate: '2024-03-15',
-      status: 'active',
-      submitted: 18,
-      total: 30,
-      description: 'Test on quadratic equations and polynomials',
-      createdDate: '2024-03-01',
-      icon: '√x',
-      iconBg: 'bg-purple-500',
-      progress: 60,
-    },
-    {
-      id: 2,
-      title: 'Geometry Problem Set',
-      class: '8B',
-      className: 'Class 8B',
-      type: 'Assignment',
-      dueDate: '2024-03-12',
-      status: 'active',
-      submitted: 25,
-      total: 28,
-      description: 'Practice problems on triangles and circles',
-      createdDate: '2024-02-28',
-      icon: '△',
-      iconBg: 'bg-emerald-500',
-      progress: 89,
-    },
-    {
-      id: 3,
-      title: 'Trigonometry Review',
-      class: '9C',
-      className: 'Class 9C',
-      type: 'Homework',
-      dueDate: '2024-03-08',
-      status: 'completed',
-      submitted: 32,
-      total: 32,
-      description: 'Review exercises for midterm preparation',
-      createdDate: '2024-02-25',
-      icon: '∿',
-      iconBg: 'bg-emerald-500',
-      progress: 100,
-    },
-    {
-      id: 4,
-      title: 'Statistics Project',
-      class: '10A',
-      className: 'Class 10A',
-      type: 'Project',
-      dueDate: '2024-03-20',
-      status: 'draft',
-      submitted: 0,
-      total: 25,
-      description: 'Data collection and analysis project',
-      createdDate: '2024-03-05',
-      icon: '📊',
-      iconBg: 'bg-blue-500',
-      progress: 0,
-    },
-    {
-      id: 5,
-      title: 'Calculus Assignment',
-      class: '10A',
-      className: 'Class 10A',
-      type: 'Assignment',
-      dueDate: '2024-03-10',
-      status: 'active',
-      submitted: 15,
-      total: 25,
-      description: 'Derivatives and integration problems',
-      createdDate: '2024-02-20',
-      icon: '∫',
-      iconBg: 'bg-orange-500',
-      progress: 60,
-    },
-  ]);
 
-  const classes = [
-    { id: 'all', name: 'All Classes' },
-    { id: '8A', name: 'Class 8A' },
-    { id: '8B', name: 'Class 8B' },
-    { id: '9C', name: 'Class 9C' },
-    { id: '10A', name: 'Class 10A' },
-  ];
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
-  const handleCreateAssignment = (e) => {
-    e.preventDefault();
-    const newAssignmentData = {
-      id: assignments.length + 1,
-      title: newAssignment.title,
-      class: newAssignment.class === 'all' ? '8A' : newAssignment.class,
-      className: `Class ${newAssignment.class === 'all' ? '8A' : newAssignment.class}`,
-      type: newAssignment.type,
-      dueDate: newAssignment.dueDate,
-      status: 'draft',
-      submitted: 0,
-      total: 30,
-      description: newAssignment.description,
-      createdDate: new Date().toISOString().split('T')[0],
-      icon: newAssignment.type === 'Quiz' ? '?' : newAssignment.type === 'Project' ? '📊' : '📝',
-      iconBg: 'bg-blue-500',
-      progress: 0,
+  // Load assignments and classes from API
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [assignRes, classRes] = await Promise.all([
+          apiService.getAssignments(),
+          apiService.getClasses()
+        ]);
+        if (assignRes.success) setAssignments(assignRes.data || []);
+        if (classRes.success) setClasses(classRes.data || []);
+      } catch (err) {
+        console.error('Failed to load assignments:', err);
+        showToast('Failed to load data. Make sure the backend is running.', 'error');
+      } finally {
+        setLoading(false);
+      }
     };
-    
-    setAssignments([...assignments, newAssignmentData]);
-    setShowCreateModal(false);
+    fetchData();
+  }, []);
+
+  const resetCreateForm = () => {
     setNewAssignment({
       title: '',
       type: 'Assignment',
-      class: 'all',
+      assignmentType: 'qa',
+      class: '',
       dueDate: '',
       description: '',
-      totalMarks: 100
+      instructions: '',
+      totalMarks: 100,
+      questions: [{ question: '', points: 10 }]
+    });
+    setCreateStep(1);
+  };
+
+  // Question builder helpers
+  const addQuestion = () => {
+    setNewAssignment(prev => ({
+      ...prev,
+      questions: [...prev.questions, { question: '', points: 10 }]
+    }));
+  };
+
+  const removeQuestion = (idx) => {
+    setNewAssignment(prev => ({
+      ...prev,
+      questions: prev.questions.filter((_, i) => i !== idx)
+    }));
+  };
+
+  const updateQuestion = (idx, field, value) => {
+    setNewAssignment(prev => {
+      const updated = [...prev.questions];
+      updated[idx] = { ...updated[idx], [field]: value };
+      return { ...prev, questions: updated };
     });
   };
 
-  const handlePublish = (assignmentId) => {
-    setAssignments(assignments.map(assignment => 
-      assignment.id === assignmentId 
-        ? { ...assignment, status: 'active' }
-        : assignment
-    ));
+  const handleCreateAssignment = async (e) => {
+    e.preventDefault();
+    if (!newAssignment.class) { showToast('Please select a class', 'error'); return; }
+    // Compute totalMarks from questions
+    const totalMarks = newAssignment.questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0) || newAssignment.totalMarks;
+    try {
+      const payload = {
+        ...newAssignment,
+        totalMarks,
+        status: 'active',  // publish immediately so students can see it
+        questions: newAssignment.questions.map(q => ({
+          question: q.question,
+          type: 'essay',
+          points: Number(q.points) || 10
+        }))
+      };
+      const res = await apiService.createAssignment(payload);
+      if (res.success) {
+        setAssignments(prev => [res.data, ...prev]);
+        setShowCreateModal(false);
+        resetCreateForm();
+        showToast(`${newAssignment.type} published! Students can now see it.`);
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to create assignment', 'error');
+    }
   };
 
-  const handleGrade = (assignment) => {
+  const handlePublish = async (assignmentId) => {
+    try {
+      const res = await apiService.updateAssignment(assignmentId, { status: 'active' });
+      if (res.success) {
+        setAssignments(prev => prev.map(a => a._id === assignmentId ? { ...a, status: 'active' } : a));
+        showToast('Assignment published successfully!');
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to publish', 'error');
+    }
+  };
+
+  const handleDelete = async (assignmentId) => {
+    if (!window.confirm('Are you sure you want to delete this assignment?')) return;
+    try {
+      await apiService.deleteAssignment(assignmentId);
+      setAssignments(prev => prev.filter(a => a._id !== assignmentId));
+      showToast('Assignment deleted.');
+    } catch (err) {
+      showToast(err.message || 'Failed to delete', 'error');
+    }
+  };
+
+  const openGradeModal = async (assignment) => {
     setSelectedAssignment(assignment);
     setShowGradeModal(true);
+    setGradeLoading(true);
+    try {
+      const res = await apiService.getAssignmentSubmissions(assignment._id);
+      const subs = res.data || [];
+      setSubmissions(subs);
+      // Build grading data pre-filled with existing scores
+      const gd = {};
+      subs.forEach(sub => {
+        const sid = sub._id;
+        gd[sid] = { score: sub.score ?? '', feedback: sub.feedback || '' };
+      });
+      setGradingData(gd);
+    } catch (err) {
+      console.error('Failed to load submissions:', err);
+      showToast('Failed to load submissions', 'error');
+    } finally {
+      setGradeLoading(false);
+    }
   };
 
-  const filteredAssignments = assignments.filter(assignment => {
-    const matchesTab = activeTab === 'all' || assignment.status === activeTab;
-    const matchesClass = selectedClass === 'all' || assignment.class === selectedClass;
-    const matchesSearch = assignment.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         assignment.className.toLowerCase().includes(searchTerm.toLowerCase());
+  const openViewModal = (assignment) => {
+    setSelectedAssignment(assignment);
+    setShowViewModal(true);
+  };
+
+  const handleSaveGrade = async (submissionId) => {
+    if (!selectedAssignment) return;
+    const { score, feedback } = gradingData[submissionId] || {};
+    if (score === '' || score === undefined) { showToast('Please enter a score', 'error'); return; }
+    setSavingGrade(submissionId);
+    try {
+      await apiService.gradeSubmission(selectedAssignment._id, submissionId, {
+        score: Number(score),
+        feedback
+      });
+      setSubmissions(prev => prev.map(s => s._id === submissionId
+        ? { ...s, score: Number(score), feedback, gradedAt: new Date().toISOString() }
+        : s
+      ));
+      showToast('Grade saved!');
+    } catch (err) {
+      showToast(err.message || 'Failed to save grade', 'error');
+    } finally {
+      setSavingGrade('');
+    }
+  };
+
+  const filteredAssignments = assignments.filter(a => {
+    const matchesTab = activeTab === 'all' || a.status === activeTab;
+    const matchesClass = selectedClass === 'all' || a.class?._id === selectedClass;
+    const matchesSearch = a.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          a.class?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesTab && matchesClass && matchesSearch;
   });
 
-  const getStatusCounts = () => {
-    const active = assignments.filter(a => a.status === 'active').length;
-    const completed = assignments.filter(a => a.status === 'completed').length;
-    const draft = assignments.filter(a => a.status === 'draft').length;
-    const total = assignments.length;
-    
-    return { active, completed, draft, total };
-  };
+  const active = assignments.filter(a => a.status === 'active').length;
+  const completed = assignments.filter(a => a.status === 'completed').length;
+  const draft = assignments.filter(a => a.status === 'draft').length;
+  const totalSubmissions = assignments.reduce((sum, a) => sum + (a.submissions?.length || 0), 0);
 
-  const getClassStats = () => {
-    const filtered = selectedClass === 'all' ? assignments : assignments.filter(a => a.class === selectedClass);
-    const mostGraded = filtered.filter(a => a.status === 'completed').length;
-    const dueSoon = filtered.filter(a => {
-      const dueDate = new Date(a.dueDate);
-      const today = new Date();
-      const diffTime = dueDate.getTime() - today.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays <= 3 && diffDays >= 0 && a.status === 'active';
-    }).length;
-    const lateSubmissions = filtered.filter(a => {
-      const dueDate = new Date(a.dueDate);
-      const today = new Date();
-      return dueDate < today && a.status === 'active' && a.submitted < a.total;
-    }).length;
-
-    return { mostGraded, dueSoon, lateSubmissions };
-  };
-
-  const { active, completed, draft, total } = getStatusCounts();
-  const { mostGraded, dueSoon, lateSubmissions } = getClassStats();
-
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric' 
-    });
+  const formatDate = (ds) => {
+    if (!ds) return 'No date';
+    const d = new Date(ds);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'active':
-        return <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-medium">Active</span>;
-      case 'completed':
-        return <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">Completed</span>;
-      case 'draft':
-        return <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">Draft</span>;
-      default:
-        return null;
-    }
+    const styles = {
+      active: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+      completed: 'bg-blue-100 text-blue-800 border border-blue-200',
+      draft: 'bg-gray-100 text-gray-700 border border-gray-200',
+      archived: 'bg-red-100 text-red-800 border border-red-200'
+    };
+    return <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${styles[status] || styles.draft}`}>{status?.charAt(0).toUpperCase() + status?.slice(1)}</span>;
   };
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-5 py-3 rounded-xl shadow-lg text-white font-medium transition-all ${toast.type === 'error' ? 'bg-red-500' : 'bg-emerald-500'}`}>
+          {toast.msg}
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-          <div className="mb-4 lg:mb-0">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
             <h1 className="text-3xl font-bold text-gray-900">Assignments</h1>
-            <p className="text-gray-600 mt-1">Manage and track all your assignments</p>
+            <p className="text-gray-500 mt-1">Create Q&amp;A assignments, manage submissions &amp; grade students</p>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <div className="relative">
               <select
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
-                className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-2 pr-8 focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium"
+                className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-2 pr-8 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
+                <option value="all">All Classes</option>
                 {classes.map((cls) => (
-                  <option key={cls.id} value={cls.id}>{cls.name}</option>
+                  <option key={cls._id} value={cls._id}>{cls.name}</option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
-            <button onClick={() => setShowCreateModal(true)} className="bg-blue-600 text-white px-6 py-2 rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center space-x-2">
+            <button
+              onClick={() => { resetCreateForm(); setShowCreateModal(true); }}
+              className="bg-blue-600 text-white px-5 py-2 rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
+            >
               <Plus className="w-4 h-4" />
-              <span>Create Assignment</span>
+              Create Assignment
             </button>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-            <div className="flex items-center space-x-3">
-              <div className="bg-purple-100 p-3 rounded-xl">
-                <Trophy className="w-6 h-6 text-purple-600" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'Active', value: active, icon: CheckCircle, color: 'emerald' },
+            { label: 'Drafts', value: draft, icon: Clock, color: 'amber' },
+            { label: 'Completed', value: completed, icon: Trophy, color: 'blue' },
+            { label: 'Total Submissions', value: totalSubmissions, icon: Users, color: 'purple' }
+          ].map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex items-center gap-4">
+              <div className={`bg-${color}-100 p-3 rounded-xl`}>
+                <Icon className={`w-5 h-5 text-${color}-600`} />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">{mostGraded}</p>
-                <p className="text-sm text-gray-600">Most Graded</p>
+                <p className="text-2xl font-bold text-gray-900">{value}</p>
+                <p className="text-xs text-gray-500 font-medium">{label}</p>
               </div>
             </div>
-          </div>
-          
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-            <div className="flex items-center space-x-3">
-              <div className="bg-orange-100 p-3 rounded-xl">
-                <AlertCircle className="w-6 h-6 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{dueSoon}</p>
-                <p className="text-sm text-gray-600">Due Soon</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-            <div className="flex items-center space-x-3">
-              <div className="bg-red-100 p-3 rounded-xl">
-                <Users className="w-6 h-6 text-red-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{lateSubmissions}</p>
-                <p className="text-sm text-gray-600">Late Submissions</p>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Filter Tabs */}
+        {/* Assignment List */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <div className="flex space-x-1">
+          <div className="p-5 border-b border-gray-200 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <div className="flex gap-1">
+              {['active', 'draft', 'completed', 'all'].map(tab => (
                 <button
-                  onClick={() => setActiveTab('active')}
-                  className={`px-4 py-2 rounded-xl font-medium transition-colors ${
-                    activeTab === 'active'
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${activeTab === tab ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
                 >
-                  Active
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </button>
-                <button
-                  onClick={() => setActiveTab('draft')}
-                  className={`px-4 py-2 rounded-xl font-medium transition-colors ${
-                    activeTab === 'draft'
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  Draft
-                </button>
-                <button
-                  onClick={() => setActiveTab('completed')}
-                  className={`px-4 py-2 rounded-xl font-medium transition-colors ${
-                    activeTab === 'completed'
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  Completed
-                </button>
-              </div>
-              
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search assignments..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
-                />
-              </div>
+              ))}
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search assignments..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-56"
+              />
             </div>
           </div>
 
-          {/* Assignments List */}
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                <span>{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</span>
-                <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-sm font-medium">
-                  {filteredAssignments.length}
-                </span>
-              </h3>
-              {activeTab === 'active' && (
-                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-medium">
-                  Beta
-                </span>
-              )}
-            </div>
-
-            <div className="space-y-4">
-              {filteredAssignments.map((assignment) => (
-                <div key={assignment.id} className="border border-gray-200 rounded-2xl p-6 hover:shadow-md transition-all duration-200 bg-white">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-4 flex-1">
-                      <div className={`${assignment.iconBg} p-3 rounded-xl flex items-center justify-center min-w-[48px] h-12`}>
-                        <span className="text-white font-bold text-lg">{assignment.icon}</span>
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">{assignment.title}</h3>
-                          {getStatusBadge(assignment.status)}
-                        </div>
-                        
-                        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
-                          <span>{assignment.className}</span>
-                          <span>•</span>
-                          <span>{assignment.type}</span>
-                          <span>•</span>
-                          <span>Due {formatDate(assignment.dueDate)}</span>
-                        </div>
-
-                        {assignment.status !== 'draft' && (
-                          <div className="flex items-center space-x-4">
-                            <div className="flex items-center space-x-2">
-                              <Users className="w-4 h-4 text-gray-400" />
-                              <span className="text-sm text-gray-600">
-                                {assignment.progress}% Submitted
-                              </span>
-                            </div>
-                            <div className="flex-1 max-w-xs">
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div 
-                                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                  style={{ width: `${assignment.progress}%` }}
-                                ></div>
-                              </div>
-                            </div>
-                            <span className="text-sm font-medium text-gray-900">
-                              {assignment.submitted} / {assignment.total}
-                            </span>
+          <div className="p-5">
+            {loading ? (
+              <div className="flex justify-center py-16">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+              </div>
+            ) : filteredAssignments.length === 0 ? (
+              <div className="text-center py-16">
+                <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <h3 className="text-lg font-semibold text-gray-700 mb-1">No assignments found</h3>
+                <p className="text-sm text-gray-500">Create your first Q&amp;A assignment using the button above.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredAssignments.map(assignment => {
+                  const submissionCount = assignment.submissions?.length || 0;
+                  const gradedCount = assignment.submissions?.filter(s => s.score !== undefined && s.score !== null).length || 0;
+                  const dueDate = new Date(assignment.dueDate);
+                  const isOverdue = dueDate < new Date() && assignment.status === 'active';
+                  return (
+                    <div key={assignment._id} className="border border-gray-200 rounded-2xl p-5 hover:shadow-md transition-all duration-200 bg-white">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-4 flex-1 min-w-0">
+                          <div className={`bg-gradient-to-br ${tc(assignment.type).bg} p-3 rounded-xl flex items-center justify-center min-w-[48px] h-12 text-xl`}>
+                            {tc(assignment.type).emoji}
                           </div>
-                        )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                              <h3 className="text-base font-bold text-gray-900">{assignment.title}</h3>
+                              {getStatusBadge(assignment.status)}
+                              {assignment.assignmentType === 'qa' && (
+                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${tc(assignment.type).badge}`}>
+                                  {tc(assignment.type).emoji} {assignment.type || 'Q&A'}
+                                </span>
+                              )}
+                              {isOverdue && <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full border border-red-200">Overdue</span>}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mb-2">
+                              <span className="font-medium text-gray-700">{assignment.class?.name || 'No class'}</span>
+                              <span>•</span>
+                              <span>{assignment.questions?.length || 0} Questions</span>
+                              <span>•</span>
+                              <span>{assignment.totalMarks} Marks</span>
+                              <span>•</span>
+                              <span>Due {formatDate(assignment.dueDate)}</span>
+                            </div>
+                            {assignment.status !== 'draft' && (
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs text-gray-500">{submissionCount} submitted • {gradedCount} graded</span>
+                                <div className="flex-1 max-w-xs bg-gray-200 rounded-full h-1.5">
+                                  <div
+                                    className="bg-blue-600 h-1.5 rounded-full"
+                                    style={{ width: `${submissionCount ? (gradedCount / submissionCount) * 100 : 0}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => openViewModal(assignment)}
+                            title="View Assignment"
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {assignment.status === 'active' && (
+                            <button
+                              onClick={() => openGradeModal(assignment)}
+                              className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors"
+                            >
+                              Grade
+                            </button>
+                          )}
+                          {assignment.status === 'draft' && (
+                            <button
+                              onClick={() => handlePublish(assignment._id)}
+                              className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
+                            >
+                              Publish
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDelete(assignment._id)}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-
-                    <div className="flex items-center space-x-2 ml-4">
-                      {assignment.status === 'active' && (
-                        <button onClick={() => handleGrade(assignment)} className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-emerald-700 transition-colors">
-                          Grade
-                        </button>
-                      )}
-                      {assignment.status === 'draft' && (
-                        <button onClick={() => handlePublish(assignment.id)} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-blue-700 transition-colors">
-                          Publish
-                        </button>
-                      )}
-                      <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {assignment.status === 'draft' && (
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                      <p className="text-sm text-gray-600">{assignment.description}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {filteredAssignments.length === 0 && (
-              <div className="text-center py-12">
-                <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No assignments found</h3>
-                <p className="text-gray-500">
-                  {searchTerm 
-                    ? 'Try adjusting your search terms or filters.'
-                    : `No ${activeTab} assignments for the selected class.`
-                  }
-                </p>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
+      </div>
 
-      {/* Create Assignment Modal */}
+      {/* ──────────── Create Assignment Modal ──────────── */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-gray-900">Create New Assignment</h3>
-              <button 
-                onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-xl transition-all duration-200"
-              >
-                <X className="w-6 h-6" />
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 flex-shrink-0">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Create {newAssignment.type} {tc(newAssignment.type).emoji}</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Step {createStep} of 2</p>
+              </div>
+              <button onClick={() => { setShowCreateModal(false); resetCreateForm(); }} className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-xl">
+                <X className="w-5 h-5" />
               </button>
             </div>
-            
-            <form onSubmit={handleCreateAssignment} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Assignment Title</label>
-                  <input
-                    type="text"
-                    value={newAssignment.title}
-                    onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., Chapter 5 Quiz"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-                  <select
-                    value={newAssignment.type}
-                    onChange={(e) => setNewAssignment({...newAssignment, type: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="Assignment">Assignment</option>
-                    <option value="Quiz">Quiz</option>
-                    <option value="Homework">Homework</option>
-                    <option value="Project">Project</option>
-                    <option value="Exam">Exam</option>
-                  </select>
-                </div>
+
+            {/* Step progress */}
+            <div className="px-6 pt-4 flex-shrink-0">
+              <div className="flex gap-2">
+                <div className={`flex-1 h-1.5 rounded-full ${createStep >= 1 ? 'bg-blue-600' : 'bg-gray-200'}`} />
+                <div className={`flex-1 h-1.5 rounded-full ${createStep >= 2 ? 'bg-blue-600' : 'bg-gray-200'}`} />
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Class</label>
-                  <select
-                    value={newAssignment.class}
-                    onChange={(e) => setNewAssignment({...newAssignment, class: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    {classes.map((cls) => (
-                      <option key={cls.id} value={cls.id}>{cls.name}</option>
+            </div>
+
+            <form onSubmit={handleCreateAssignment} className="flex flex-col flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {createStep === 1 && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">Title <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          value={newAssignment.title}
+                          onChange={e => setNewAssignment(p => ({ ...p, title: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="e.g. Chapter 3 Review"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">Type</label>
+                        <select
+                          value={newAssignment.type}
+                          onChange={e => setNewAssignment(p => ({ ...p, type: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500"
+                        >
+                          {['Assignment', 'Quiz', 'Homework', 'Project', 'Exam'].map(t => <option key={t}>{t}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">Class <span className="text-red-500">*</span></label>
+                        <select
+                          value={newAssignment.class}
+                          onChange={e => setNewAssignment(p => ({ ...p, class: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500"
+                          required
+                        >
+                          <option value="">Select a class...</option>
+                          {classes.map(cls => <option key={cls._id} value={cls._id}>{cls.name} — {cls.subject}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">Due Date <span className="text-red-500">*</span></label>
+                        <input
+                          type="date"
+                          value={newAssignment.dueDate}
+                          onChange={e => setNewAssignment(p => ({ ...p, dueDate: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">Description</label>
+                      <textarea
+                        value={newAssignment.description}
+                        onChange={e => setNewAssignment(p => ({ ...p, description: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500"
+                        rows={2}
+                        placeholder="Brief description for students..."
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">Instructions</label>
+                      <textarea
+                        value={newAssignment.instructions}
+                        onChange={e => setNewAssignment(p => ({ ...p, instructions: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500"
+                        rows={2}
+                        placeholder="Detailed instructions for answering..."
+                      />
+                    </div>
+                  </>
+                )}
+
+                {createStep === 2 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Questions</h4>
+                        <p className="text-xs text-gray-500 mt-0.5">Students will write open-ended text answers. Total marks: {newAssignment.questions.reduce((s, q) => s + (Number(q.points) || 0), 0)}</p>
+                      </div>
+                      <button type="button" onClick={addQuestion} className="flex items-center gap-1.5 text-sm text-blue-600 font-semibold hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
+                        <PlusCircle className="w-4 h-4" /> Add Question
+                      </button>
+                    </div>
+
+                    {newAssignment.questions.map((q, idx) => (
+                      <div key={idx} className="border border-gray-200 rounded-2xl p-4 bg-gray-50">
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <span className="bg-blue-600 text-white text-xs font-bold px-2.5 py-1 rounded-full mt-0.5">Q{idx + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeQuestion(idx)}
+                            disabled={newAssignment.questions.length === 1}
+                            className="text-gray-400 hover:text-red-500 disabled:opacity-30 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <textarea
+                          value={q.question}
+                          onChange={e => updateQuestion(idx, 'question', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 bg-white mb-3"
+                          rows={2}
+                          placeholder="Enter your question here..."
+                          required
+                        />
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-semibold text-gray-600">Marks:</label>
+                          <input
+                            type="number"
+                            value={q.points}
+                            onChange={e => updateQuestion(idx, 'points', e.target.value)}
+                            min="1"
+                            className="w-20 px-2 py-1 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                            required
+                          />
+                        </div>
+                      </div>
                     ))}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
-                  <input
-                    type="date"
-                    value={newAssignment.dueDate}
-                    onChange={(e) => setNewAssignment({...newAssignment, dueDate: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  />
-                </div>
+                  </div>
+                )}
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea
-                  value={newAssignment.description}
-                  onChange={(e) => setNewAssignment({...newAssignment, description: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  rows={4}
-                  placeholder="Describe the assignment details..."
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Total Marks</label>
-                <input
-                  type="number"
-                  value={newAssignment.totalMarks}
-                  onChange={(e) => setNewAssignment({...newAssignment, totalMarks: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  min="1"
-                  required
-                />
-              </div>
-              
-              <div className="flex space-x-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="flex-1 px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all duration-200"
-                >
-                  Create Assignment
-                </button>
+
+              {/* Footer buttons */}
+              <div className="p-6 border-t border-gray-200 flex justify-between gap-3 flex-shrink-0">
+                {createStep === 1 ? (
+                  <>
+                    <button type="button" onClick={() => { setShowCreateModal(false); resetCreateForm(); }} className="px-5 py-2 text-gray-600 hover:text-gray-800 font-medium text-sm">Cancel</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!newAssignment.title || !newAssignment.class || !newAssignment.dueDate) {
+                          showToast('Please fill in all required fields', 'error');
+                          return;
+                        }
+                        setCreateStep(2);
+                      }}
+                      className="bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors"
+                    >
+                      Next: Add Questions →
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => setCreateStep(1)} className="px-5 py-2 text-gray-600 hover:text-gray-800 font-medium text-sm">← Back</button>
+                    <button type="submit" className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2 rounded-xl font-semibold text-sm hover:from-blue-700 hover:to-indigo-700 transition-all">
+                      Create Assignment
+                    </button>
+                  </>
+                )}
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Grade Assignment Modal */}
-      {showGradeModal && selectedAssignment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-gray-900">Grade: {selectedAssignment.title}</h3>
-              <button 
-                onClick={() => setShowGradeModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-xl transition-all duration-200"
-              >
-                <X className="w-6 h-6" />
+      {/* ──────────── View Assignment Modal ──────────── */}
+      {showViewModal && selectedAssignment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900">{selectedAssignment.title}</h3>
+              <button onClick={() => setShowViewModal(false)} className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-xl">
+                <X className="w-5 h-5" />
               </button>
             </div>
-            
-            <div className="space-y-6">
-              <div className="bg-gray-50 rounded-xl p-4">
-                <h4 className="font-semibold text-gray-900 mb-2">Assignment Details</h4>
-                <p className="text-gray-600">{selectedAssignment.description}</p>
-                <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                  <span>Due: {formatDate(selectedAssignment.dueDate)}</span>
-                  <span>Submissions: {selectedAssignment.submitted}/{selectedAssignment.total}</span>
-                </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              <div className="flex flex-wrap gap-2">
+                {getStatusBadge(selectedAssignment.status)}
+                <span className="px-2.5 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full border border-purple-200">Q&amp;A</span>
+                <span className="px-2.5 py-1 bg-gray-100 text-gray-700 text-xs font-semibold rounded-full">{selectedAssignment.totalMarks} Total Marks</span>
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Sample student submissions */}
-                {[
-                  { name: 'Sarah Johnson', score: 85, status: 'graded' },
-                  { name: 'Mike Chen', score: null, status: 'pending' },
-                  { name: 'Emma Davis', score: 92, status: 'graded' },
-                  { name: 'John Smith', score: null, status: 'pending' },
-                  { name: 'Lisa Wang', score: 78, status: 'graded' },
-                  { name: 'David Brown', score: null, status: 'pending' }
-                ].map((student, index) => (
-                  <div key={index} className="border border-gray-200 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h5 className="font-medium text-gray-900">{student.name}</h5>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        student.status === 'graded' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {student.status === 'graded' ? 'Graded' : 'Pending'}
-                      </span>
-                    </div>
-                    {student.status === 'graded' ? (
-                      <div className="text-2xl font-bold text-green-600">{student.score}/100</div>
-                    ) : (
-                      <div className="space-y-2">
-                        <input
-                          type="number"
-                          placeholder="Score"
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                          min="0"
-                          max="100"
-                        />
-                        <button className="w-full bg-blue-600 text-white py-1 rounded text-sm hover:bg-blue-700 transition-colors">
-                          Grade
-                        </button>
+              <div className="text-sm text-gray-600 space-y-1">
+                <p><span className="font-semibold">Class:</span> {selectedAssignment.class?.name}</p>
+                <p><span className="font-semibold">Due:</span> {formatDate(selectedAssignment.dueDate)}</p>
+                {selectedAssignment.description && <p><span className="font-semibold">Description:</span> {selectedAssignment.description}</p>}
+                {selectedAssignment.instructions && <p><span className="font-semibold">Instructions:</span> {selectedAssignment.instructions}</p>}
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-3">Questions ({selectedAssignment.questions?.length || 0})</h4>
+                <div className="space-y-3">
+                  {(selectedAssignment.questions || []).map((q, i) => (
+                    <div key={i} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0">Q{i + 1}</span>
+                        <span className="text-xs text-gray-500 font-medium">{q.points || 0} pts</span>
                       </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setShowGradeModal(false)}
-                  className="px-6 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-                >
-                  Close
-                </button>
-                <button className="px-6 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors">
-                  Export Grades
-                </button>
+                      <p className="text-sm text-gray-800 mt-2">{q.question}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
-      </div>
+
+      {/* ──────────── Grade Modal ──────────── */}
+      {showGradeModal && selectedAssignment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 flex-shrink-0">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Grade Submissions</h3>
+                <p className="text-sm text-gray-500 mt-0.5">{selectedAssignment.title} • {selectedAssignment.totalMarks} total marks</p>
+              </div>
+              <button onClick={() => setShowGradeModal(false)} className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-xl">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {gradeLoading ? (
+                <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" /></div>
+              ) : submissions.length === 0 ? (
+                <div className="text-center py-16">
+                  <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <h4 className="text-lg font-semibold text-gray-700">No submissions yet</h4>
+                  <p className="text-sm text-gray-500 mt-1">Students haven't submitted answers for this assignment.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {submissions.map(sub => {
+                    const student = sub.student;
+                    const isGraded = sub.score !== undefined && sub.score !== null;
+                    const gd = gradingData[sub._id] || { score: '', feedback: '' };
+                    return (
+                      <div key={sub._id} className="border border-gray-200 rounded-2xl overflow-hidden">
+                        {/* Student header */}
+                        <div className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-200">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm">
+                              {(student?.fullName || student?.name || 'S')[0].toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900 text-sm">{student?.fullName || student?.name || 'Unknown Student'}</p>
+                              <p className="text-xs text-gray-500">{student?.email} • Submitted {formatDate(sub.submittedAt)}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {sub.isLate && <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full">Late</span>}
+                            {isGraded
+                              ? <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-sm font-bold rounded-full">{sub.score}/{selectedAssignment.totalMarks}</span>
+                              : <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded-full">Pending Grade</span>
+                            }
+                          </div>
+                        </div>
+
+                        {/* Q&A Answers */}
+                        <div className="p-4 space-y-3">
+                          {(selectedAssignment.questions || []).map((q, qi) => {
+                            const ans = (sub.answers || []).find(a => a.questionIndex === qi);
+                            return (
+                              <div key={qi} className="bg-white border border-gray-100 rounded-xl p-3">
+                                <div className="flex items-start gap-2 mb-2">
+                                  <span className="bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0">Q{qi + 1}</span>
+                                  <span className="text-xs text-gray-500">{q.points} pts</span>
+                                </div>
+                                <p className="text-sm font-medium text-gray-700 mb-2">{q.question}</p>
+                                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+                                  <p className="text-xs font-semibold text-blue-700 mb-1 flex items-center gap-1">
+                                    <MessageSquare className="w-3 h-3" /> Student's Answer
+                                  </p>
+                                  <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                                    {ans?.answer || <span className="text-gray-400 italic">No answer provided</span>}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* Grading Section */}
+                          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mt-2">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Star className="w-4 h-4 text-emerald-600" />
+                              <h5 className="font-semibold text-gray-900 text-sm">Assign Grade</h5>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                                  Score (out of {selectedAssignment.totalMarks})
+                                </label>
+                                <input
+                                  type="number"
+                                  value={gd.score}
+                                  onChange={e => setGradingData(prev => ({ ...prev, [sub._id]: { ...gd, score: e.target.value } }))}
+                                  min="0"
+                                  max={selectedAssignment.totalMarks}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500"
+                                  placeholder="e.g. 85"
+                                />
+                              </div>
+                              <div className="sm:col-span-2">
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Feedback (optional)</label>
+                                <input
+                                  type="text"
+                                  value={gd.feedback}
+                                  onChange={e => setGradingData(prev => ({ ...prev, [sub._id]: { ...gd, feedback: e.target.value } }))}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500"
+                                  placeholder="Good work! Keep improving..."
+                                />
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleSaveGrade(sub._id)}
+                              disabled={savingGrade === sub._id}
+                              className="mt-3 w-full sm:w-auto bg-emerald-600 text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                            >
+                              {savingGrade === sub._id ? 'Saving...' : isGraded ? '✓ Update Grade' : 'Save Grade'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

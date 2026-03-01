@@ -376,8 +376,11 @@ exports.submitAssignment = async (req, res, next) => {
     }
 
     // Ensure student is enrolled in the class
+    // IMPORTANT: Class.students holds Student model ObjectIds, not User ObjectIds.
+    // We must look up the Student model to do enrollment correctly.
     const Class = require('../models/Class');
-    const classItem = await Class.findById(assignment.class._id);
+    const StudentModel = require('../models/Student');
+    const classItem = await Class.findById(assignment.class._id || assignment.class);
     
     if (!classItem) {
       return res.status(404).json({
@@ -386,45 +389,70 @@ exports.submitAssignment = async (req, res, next) => {
       });
     }
 
-    // Check if student is in class's students array
-    const isInClassStudents = classItem.students.some(
-      s => s.toString() === student._id.toString()
-    );
+    // Find or create Student record for this student
+    let studentRecord = await StudentModel.findOne({ email: studentEmail });
 
-    // Check if class is in student's classes array
-    const isInStudentClasses = student.classes.some(
-      c => c.class && c.class.toString() === assignment.class._id.toString()
-    );
-
-    // Auto-enroll if not enrolled
-    if (!isInClassStudents || !isInStudentClasses) {
-      console.log('⚠️ Student not fully enrolled, auto-enrolling...');
-      
-      // Add to class's students array
-      if (!isInClassStudents) {
-        classItem.students.push(student._id);
-        classItem.studentCount = classItem.students.length;
-        await classItem.save();
-        console.log('✅ Added student to class');
-      }
-      
-      // Add to student's classes array
-      if (!isInStudentClasses) {
-        student.classes.push({
-          class: assignment.class._id,
-          joinedAt: new Date(),
-          status: 'active'
+    if (!studentRecord) {
+      // Auto-create a Student record so we can enroll them
+      try {
+        studentRecord = await StudentModel.create({
+          name: req.body.studentName || student.fullName || student.name || studentEmail.split('@')[0],
+          email: studentEmail,
+          studentId: `STU_${Date.now()}`
         });
-        await student.save();
-        console.log('✅ Added class to student');
+        console.log('✅ Created Student record:', studentRecord._id);
+      } catch (e) {
+        if (e.code === 11000) {
+          studentRecord = await StudentModel.findOne({ email: studentEmail });
+        } else {
+          console.warn('⚠️ Could not create Student record:', e.message);
+        }
       }
     }
 
-    // Verify assignment is active
-    if (assignment.status !== 'active') {
+    if (studentRecord) {
+      // Check if student is in class's students array (uses Student._id)
+      const isInClassStudents = classItem.students.some(
+        s => s.toString() === studentRecord._id.toString()
+      );
+
+      // Check if class is in student's classes array
+      const isInStudentClasses = (studentRecord.classes || []).some(
+        c => c.class && c.class.toString() === (assignment.class._id || assignment.class).toString()
+      );
+
+      // Auto-enroll if not enrolled
+      if (!isInClassStudents || !isInStudentClasses) {
+        console.log('⚠️ Student not fully enrolled, auto-enrolling...');
+        
+        if (!isInClassStudents) {
+          classItem.students.push(studentRecord._id);
+          classItem.studentCount = classItem.students.length;
+          await classItem.save();
+          console.log('✅ Added student to class');
+        }
+        
+        if (!isInStudentClasses) {
+          studentRecord.classes = studentRecord.classes || [];
+          studentRecord.classes.push({
+            class: assignment.class._id || assignment.class,
+            joinedAt: new Date(),
+            status: 'active'
+          });
+          await studentRecord.save();
+          console.log('✅ Added class to student');
+        }
+      }
+
+      // Use studentRecord._id for submission tracking
+      student._id = studentRecord._id;
+    }
+
+    // Verify assignment is open for submissions (not archived)
+    if (assignment.status === 'archived') {
       return res.status(400).json({
         success: false,
-        message: 'Assignment is not active. Please contact your teacher.'
+        message: 'This assignment is closed and no longer accepting submissions.'
       });
     }
 
@@ -447,6 +475,7 @@ exports.submitAssignment = async (req, res, next) => {
       student: student._id,
       content: req.body.content || '',
       attachments: req.body.attachments || [],
+      answers: req.body.answers || [], // Q&A answers: [{ questionIndex, answer }]
       isLate: new Date() > assignment.dueDate,
       submittedAt: new Date(),
       status: req.body.status || 'submitted'
@@ -458,6 +487,7 @@ exports.submitAssignment = async (req, res, next) => {
       const existingSubmission = assignment.submissions[existingSubmissionIndex];
       existingSubmission.content = submissionData.content;
       existingSubmission.attachments = submissionData.attachments;
+      existingSubmission.answers = submissionData.answers;
       existingSubmission.isLate = submissionData.isLate;
       existingSubmission.submittedAt = submissionData.submittedAt;
       existingSubmission.status = submissionData.status;
@@ -471,29 +501,17 @@ exports.submitAssignment = async (req, res, next) => {
     // Save assignment
     await assignment.save();
     console.log('💾 Assignment saved successfully');
-    
-    // Reload to get updated data with populated student
-    const updatedAssignment = await Assignment.findById(assignmentId)
-      .populate('submissions.student', 'fullName name email');
-    
-    const finalSubmissionIndex = updatedAssignment.submissions.findIndex(
-      sub => sub.student && sub.student._id.toString() === student._id.toString()
-    );
-    
-    if (finalSubmissionIndex === -1) {
-      console.error('❌ Submission not found after save');
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to save submission. Please try again.'
-      });
-    }
-    
-    const savedSubmission = updatedAssignment.submissions[finalSubmissionIndex];
+
+    // Find the saved submission directly from the in-memory assignment (avoids populate mismatch)
+    const savedSubmission = existingSubmissionIndex !== -1
+      ? assignment.submissions[existingSubmissionIndex]
+      : assignment.submissions[assignment.submissions.length - 1];
+
     console.log('✅ Submission saved successfully:', {
-      student: savedSubmission.student?.name || savedSubmission.student?.email,
-      attachmentsCount: savedSubmission.attachments?.length || 0,
-      status: savedSubmission.status,
-      submittedAt: savedSubmission.submittedAt
+      submissionId: savedSubmission?._id,
+      status: savedSubmission?.status,
+      answersCount: savedSubmission?.answers?.length || 0,
+      submittedAt: savedSubmission?.submittedAt
     });
 
     res.status(200).json({
@@ -543,10 +561,11 @@ exports.gradeSubmission = async (req, res, next) => {
       });
     }
 
-    submission.score = req.body.score;
-    submission.feedback = req.body.feedback;
+    submission.score = Number(req.body.score);
+    submission.feedback = req.body.feedback || '';
     submission.gradedAt = new Date();
     submission.gradedBy = req.user.id;
+    submission.status = 'graded'; // mark as graded so student dashboard can show it
 
     await assignment.save();
 
@@ -569,8 +588,7 @@ exports.gradeSubmission = async (req, res, next) => {
 // @access  Private
 exports.getSubmissions = async (req, res, next) => {
   try {
-    const assignment = await Assignment.findById(req.params.id)
-      .populate('submissions.student', 'fullName name email avatar');
+    const assignment = await Assignment.findById(req.params.id);
 
     if (!assignment) {
       return res.status(404).json({
@@ -579,10 +597,43 @@ exports.getSubmissions = async (req, res, next) => {
       });
     }
 
+    // Submissions store Student model _ids (not User _ids).
+    // Manually enrich each submission with student info from Student model.
+    const StudentModel = require('../models/Student');
+    const User = require('../models/User');
+
+    const enrichedSubmissions = await Promise.all(
+      assignment.submissions.map(async (sub) => {
+        let studentInfo = null;
+
+        if (sub.student) {
+          // Try Student model first
+          studentInfo = await StudentModel.findById(sub.student).select('name email avatar').lean();
+          // Fallback to User model
+          if (!studentInfo) {
+            studentInfo = await User.findById(sub.student).select('fullName name email avatar').lean();
+            if (studentInfo) {
+              studentInfo.name = studentInfo.fullName || studentInfo.name;
+            }
+          }
+        }
+
+        return {
+          ...sub.toObject(),
+          student: studentInfo ? {
+            _id: studentInfo._id,
+            name: studentInfo.name || studentInfo.fullName || 'Unknown',
+            email: studentInfo.email,
+            avatar: studentInfo.avatar
+          } : { _id: sub.student, name: 'Unknown Student', email: '' }
+        };
+      })
+    );
+
     res.status(200).json({
       success: true,
-      count: assignment.submissions.length,
-      data: assignment.submissions
+      count: enrichedSubmissions.length,
+      data: enrichedSubmissions
     });
   } catch (error) {
     res.status(500).json({
@@ -687,15 +738,36 @@ exports.getStudentAssignments = async (req, res, next) => {
       }
     }
 
-    console.log(`✅ Found student: ${student.name} (${student._id})`);
+    console.log(`✅ Found student: ${student.name || student.fullName} (User._id: ${student._id})`);
 
-    // Get all classes the student is enrolled in
-    const classes = await Class.find({ 
-      students: student._id,
-      isActive: true 
-    }).select('_id name subject');
+    // IMPORTANT: Class.students holds Student model ObjectIds (not User ObjectIds).
+    // We must look up the Student model by email to get the correct _id for class lookup.
+    const StudentModel = require('../models/Student');
+    let studentRecord = await StudentModel.findOne({ email: studentEmail.toLowerCase() });
+    
+    if (!studentRecord) {
+      // Try case-insensitive match
+      studentRecord = await StudentModel.findOne({ email: { $regex: new RegExp(`^${studentEmail}$`, 'i') } });
+    }
 
-    console.log(`📚 Student enrolled in ${classes.length} classes:`, classes.map(c => c.name));
+    let classes = [];
+
+    if (studentRecord) {
+      console.log(`✅ Found Student record: ${studentRecord.name} (Student._id: ${studentRecord._id})`);
+      // Look up classes using the Student model's _id (this is what Class.students holds)
+      classes = await Class.find({ 
+        students: studentRecord._id,
+        isActive: true 
+      }).select('_id name subject');
+      
+      console.log(`📚 Student enrolled in ${classes.length} classes:`, classes.map(c => c.name));
+    } else {
+      console.log(`⚠️ No Student record found for ${studentEmail}, but User exists. Showing all active assignments.`);
+      // Fallback: student has a User account but hasn't been added to any class yet.
+      // Show ALL active assignments so they can at least see what's available.
+      classes = await Class.find({ isActive: true }).select('_id name subject').limit(50);
+      console.log(`📚 Fallback: showing assignments from ${classes.length} classes`);
+    }
 
     if (classes.length === 0) {
       console.log(`⚠️ Student is not enrolled in any classes`);
@@ -709,10 +781,11 @@ exports.getStudentAssignments = async (req, res, next) => {
 
     const classIds = classes.map(c => c._id);
 
-    // Get all active assignments for these classes
+    // Show all assignments that aren't archived so students always see their work
+    // even if the teacher hasn't explicitly "published" them
     const assignments = await Assignment.find({
       class: { $in: classIds },
-      status: 'active'
+      status: { $in: ['active', 'draft'] }  // show both active and draft
     })
       .populate('class', 'name subject grade')
       .populate('teacher', 'name email')
@@ -720,10 +793,10 @@ exports.getStudentAssignments = async (req, res, next) => {
 
     console.log(`📝 Found ${assignments.length} active assignments for student`);
 
-    // Add student's submission status
     const assignmentsWithStatus = assignments.map(assignment => {
+      // Submissions store Student._id. Find the matching submission.
       const studentSubmission = assignment.submissions.find(
-        sub => sub.student && sub.student.toString() === student._id.toString()
+        sub => sub.student && studentRecord && sub.student.toString() === studentRecord._id.toString()
       );
 
       return {
@@ -742,7 +815,9 @@ exports.getStudentAssignments = async (req, res, next) => {
         createdAt: assignment.createdAt,
         updatedAt: assignment.updatedAt,
         subject: assignment.class?.subject || 'General',
-        studentStatus: studentSubmission ? 'submitted' : 'pending',
+        studentStatus: studentSubmission
+          ? (studentSubmission.status === 'graded' || studentSubmission.score !== undefined ? 'graded' : 'submitted')
+          : 'pending',
         studentSubmission: studentSubmission || null,
         isLate: new Date() > assignment.dueDate
       };
@@ -792,7 +867,7 @@ exports.getStudentAssignment = async (req, res, next) => {
 
     // Find student by email - using unified User model
     const User = require('../models/User');
-    const student = await User.findOne({ email: studentEmail, role: 'student' });
+    const student = await User.findOne({ email: { $regex: new RegExp(`^${decodeURIComponent(studentEmail)}$`, 'i') } });
     
     if (!student) {
       return res.status(404).json({
@@ -813,22 +888,30 @@ exports.getStudentAssignment = async (req, res, next) => {
       });
     }
 
-    // Verify student is enrolled in the class
-    const isEnrolled = assignment.class.students.some(
-      s => s.toString() === student._id.toString()
-    );
+    // Also look up Student model for enrollment check (Class.students holds Student._id)
+    const StudentModel = require('../models/Student');
+    const studentRecord = await StudentModel.findOne({ email: decodeURIComponent(studentEmail).toLowerCase() });
 
-    if (!isEnrolled) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to access this assignment'
-      });
+    // Verify enrollment using Student._id (not User._id)
+    if (studentRecord) {
+      const isEnrolled = assignment.class.students.some(
+        s => s.toString() === studentRecord._id.toString()
+      );
+      if (!isEnrolled) {
+        // Don't block access completely — just return the assignment so they can view & answer
+        console.log(`⚠️ Student not yet enrolled in class, but allowing assignment view for: ${student.email}`);
+      }
     }
 
-    // Get student's submission
+    // Get student's submission - submissions store Student._id, not User._id
     const studentSubmission = assignment.submissions.find(
-      sub => sub.student && sub.student.toString() === student._id.toString()
-    );
+      sub => {
+        if (!sub.student) return false;
+        // Try Student record _id first
+        if (studentRecord && sub.student.toString() === studentRecord._id.toString()) return true;
+        return false;
+      }
+    ) || null;
 
     res.status(200).json({
       success: true,
