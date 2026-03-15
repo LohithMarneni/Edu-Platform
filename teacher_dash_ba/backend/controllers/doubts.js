@@ -138,7 +138,7 @@ exports.updateDoubt = async (req, res, next) => {
   }
 };
 
-// @desc    Delete doubt
+// @desc    Delete doubt (teacher can only delete resolved doubts)
 // @route   DELETE /api/doubts/:id
 // @access  Private
 exports.deleteDoubt = async (req, res, next) => {
@@ -149,6 +149,14 @@ exports.deleteDoubt = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: 'Doubt not found'
+      });
+    }
+
+    // Teachers can only delete doubts that the student has marked as resolved
+    if (doubt.status !== 'resolved') {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only delete doubts that have been marked as resolved by the student.'
       });
     }
 
@@ -182,7 +190,7 @@ exports.respondToDoubt = async (req, res, next) => {
     }
 
     const response = {
-      author: req.user.name,
+      author: req.user.fullName || req.user.name || 'Teacher',
       authorType: 'teacher',
       message: req.body.message,
       attachments: req.body.attachments || []
@@ -206,39 +214,14 @@ exports.respondToDoubt = async (req, res, next) => {
   }
 };
 
-// @desc    Resolve doubt
+// @desc    Resolve doubt (Disabled for teachers - only students can resolve)
 // @route   PUT /api/doubts/:id/resolve
 // @access  Private
 exports.resolveDoubt = async (req, res, next) => {
-  try {
-    const doubt = await Doubt.findById(req.params.id);
-
-    if (!doubt) {
-      return res.status(404).json({
-        success: false,
-        message: 'Doubt not found'
-      });
-    }
-
-    doubt.status = 'resolved';
-    doubt.isResolved = true;
-    doubt.resolvedAt = new Date();
-    doubt.resolvedBy = req.user.id;
-
-    await doubt.save();
-
-    res.status(200).json({
-      success: true,
-      data: doubt,
-      message: 'Doubt resolved successfully'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
-  }
+  return res.status(403).json({
+    success: false,
+    message: 'Only students can mark a doubt as resolved. Teachers can only provide answers.'
+  });
 };
 
 // @desc    Get doubt statistics

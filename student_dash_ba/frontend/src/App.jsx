@@ -21,6 +21,15 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Derive the logged-in user's display name for the top-bar avatar
+  const getAvatarUrl = () => {
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}');
+      const name = u.fullName || u.name || u.email || 'Student';
+      return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4f46e5&color=fff&size=32`;
+    } catch { return 'https://ui-avatars.com/api/?name=Student&background=4f46e5&color=fff&size=32'; }
+  };
+
   useEffect(() => {
     // Authenticate based on presence of JWT token and expiration
     const token = localStorage.getItem('token');
@@ -110,7 +119,7 @@ function App() {
                 <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
               </button>
               <img
-                src="https://ui-avatars.com/api/?name=John+Doe&background=random&size=32"
+                src={getAvatarUrl()}
                 alt="Profile"
                 className="h-7 w-7 rounded-full"
               />
@@ -137,9 +146,9 @@ function App() {
                   <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
                 </button>
                 <img
-                  src="https://ui-avatars.com/api/?name=John+Doe&background=random&size=32"
+                  src={getAvatarUrl()}
                   alt="Profile"
-                  className="h-8 w-8 rounded-full border-2 border-gray-200"
+                  className="h-8 w-8 rounded-full border-2 border-indigo-200"
                 />
               </div>
             </div>
