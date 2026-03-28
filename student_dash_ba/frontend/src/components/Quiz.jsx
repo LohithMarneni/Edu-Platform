@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import LiveQuiz from './LiveQuiz';
 import apiService from '../services/api';
 import {
   PlayIcon,
@@ -39,6 +40,7 @@ import toast from 'react-hot-toast';
 
 const Quiz = () => {
   const navigate = useNavigate();
+  const [mainTab, setMainTab] = useState('live'); // 'live' | 'practice'
   const [currentView, setCurrentView] = useState('home'); // home, topic-select, random, multiplayer, quiz, results
   const [showHistory, setShowHistory] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -1364,22 +1366,54 @@ const Quiz = () => {
   // Render based on current view
   if (isLoading) return <LoadingScreen />;
 
-  if (showHistory) return <QuizHistoryScreen />;
+  // ─── Tab Switcher ───────────────────────────────
+  // Show tab bar unless we're deep into a quiz/history screen in practice mode
+  const inPracticeSubview = showHistory || ['quiz', 'results', 'topic-select', 'random', 'multiplayer'].includes(currentView);
 
-  switch (currentView) {
-    case 'topic-select':
-      return <TopicSelection />;
-    case 'random':
-      return <RandomQuiz />;
-    case 'multiplayer':
-      return <MultiplayerScreen />;
-    case 'quiz':
-      return <QuizScreen />;
-    case 'results':
-      return <ResultsScreen />;
-    default:
-      return <QuizHome />;
-  }
+  return (
+    <div>
+      {/* Tab bar - hidden when inside a deep sub-view in practice mode */}
+      {!inPracticeSubview && (
+        <div className="max-w-6xl mx-auto px-4 pt-4 mb-0">
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+            <button
+              onClick={() => setMainTab('live')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                mainTab === 'live' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              🏆 Live Quizzes
+            </button>
+            <button
+              onClick={() => setMainTab('practice')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                mainTab === 'practice' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              🎓 Practice Mode
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Content */}
+      {mainTab === 'live' && !inPracticeSubview ? (
+        <LiveQuiz />
+      ) : (
+        (() => {
+          if (showHistory) return <QuizHistoryScreen />;
+          switch (currentView) {
+            case 'topic-select': return <TopicSelection />;
+            case 'random': return <RandomQuiz />;
+            case 'multiplayer': return <MultiplayerScreen />;
+            case 'quiz': return <QuizScreen />;
+            case 'results': return <ResultsScreen />;
+            default: return <QuizHome />;
+          }
+        })()
+      )}
+    </div>
+  );
 };
 
 export default Quiz;

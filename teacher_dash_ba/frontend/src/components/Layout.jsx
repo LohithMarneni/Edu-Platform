@@ -11,7 +11,8 @@ import {
   X,
   GraduationCap,
   Bell,
-  LogOut
+  LogOut,
+  Brain
 } from 'lucide-react';
 
 const Layout = ({ children, user, onLogout }) => {
@@ -22,6 +23,7 @@ const Layout = ({ children, user, onLogout }) => {
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'My Classes', href: '/classes', icon: BookOpen },
     { name: 'Assignments', href: '/assignments', icon: FileText },
+    { name: 'Quizzes', href: '/quiz', icon: Brain },
     { name: 'Doubt Resolution', href: '/doubts', icon: HelpCircle },
     { name: 'Content', href: '/content', icon: FolderOpen },
     { name: 'Settings', href: '/settings', icon: Settings },

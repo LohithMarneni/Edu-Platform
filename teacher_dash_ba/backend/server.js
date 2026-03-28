@@ -164,6 +164,9 @@ app.use('/api/assignments', protect, authorize('teacher'), assignmentRoutes);
 app.use('/api/doubts', protect, authorize('teacher'), doubtRoutes);
 // Student-facing doubt routes (no auth - verified by email)
 app.use('/api/student-doubts', require('./routes/studentDoubts'));
+// Standalone quiz routes
+app.use('/api/standalone-quizzes', require('./routes/standaloneQuizzes'));
+app.use('/api/student-quizzes', require('./routes/studentQuizzes'));
 app.use('/api/content/student', studentContentRoutes);
 app.use('/api/content', protect, authorize('teacher'), contentRoutes);
 app.use('/api/dashboard', protect, authorize('teacher'), dashboardRoutes);
