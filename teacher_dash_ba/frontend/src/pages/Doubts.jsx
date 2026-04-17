@@ -9,7 +9,13 @@ const Doubts = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('all');
   const [expandedDoubt, setExpandedDoubt] = useState(null);
+  const [expandedCreateNote, setExpandedCreateNote] = useState(null);
   const [responseText, setResponseText] = useState('');
+  
+  // Note Creation States
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteSubject, setNoteSubject] = useState('');
+  const [noteContent, setNoteContent] = useState('');
   const [doubts, setDoubts] = useState([]);
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,6 +84,45 @@ const Doubts = () => {
       }
     } catch (err) {
       showToast('Failed to send response', 'error');
+    } finally {
+      setSending('');
+    }
+  };
+
+  const handleCreateNoteFromDoubt = async (doubt) => {
+    if (!noteTitle.trim() || !noteSubject.trim() || !noteContent.trim()) {
+      showToast('Title, Subject, and Content are required', 'error');
+      return;
+    }
+    setSending(`note-${doubt._id}`);
+    try {
+      const token = localStorage.getItem('token');
+      const classId = doubt.class?._id;
+      
+      const payload = {
+        title: noteTitle,
+        content: noteContent,
+        subject: noteSubject,
+        linkedClasses: classId ? [classId] : []
+      };
+
+      const res = await fetch(`${TEACHER_BASE}/teacher-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setExpandedCreateNote(null);
+        setNoteTitle('');
+        setNoteSubject('');
+        setNoteContent('');
+        showToast('Official Note published to class!');
+      } else {
+        showToast(data.message || 'Failed to create note', 'error');
+      }
+    } catch (err) {
+      showToast('Failed to create note', 'error');
     } finally {
       setSending('');
     }
@@ -265,11 +310,18 @@ const Doubts = () => {
                     {doubt.status !== 'resolved' && (
                       <>
                         <button
-                          onClick={() => { setExpandedDoubt(expandedDoubt === doubt._id ? null : doubt._id); setResponseText(''); }}
+                          onClick={() => { setExpandedDoubt(expandedDoubt === doubt._id ? null : doubt._id); setResponseText(''); setExpandedCreateNote(null); }}
                           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors font-medium text-sm"
                         >
                           <Send className="w-3.5 h-3.5" />
                           {expandedDoubt === doubt._id ? 'Cancel' : 'Reply'}
+                        </button>
+                        <button
+                          onClick={() => { setExpandedCreateNote(expandedCreateNote === doubt._id ? null : doubt._id); setExpandedDoubt(null); setNoteTitle(doubt.title); setNoteSubject(doubt.subject); setNoteContent(''); }}
+                          className="flex items-center gap-2 bg-purple-100 text-purple-700 px-4 py-2 rounded-xl hover:bg-purple-200 transition-colors font-medium text-sm"
+                        >
+                          <Brain className="w-3.5 h-3.5" />
+                          {expandedCreateNote === doubt._id ? 'Cancel Note' : 'Create Note From Doubt'}
                         </button>
                       </>
                     )}
@@ -307,6 +359,50 @@ const Doubts = () => {
                         >
                           {sending === doubt._id ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                           Send Response
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Create Note Box */}
+                  {expandedCreateNote === doubt._id && (
+                    <div className="mt-4 pt-4 border-t border-purple-200 bg-purple-50/50 p-4 rounded-xl">
+                      <p className="text-sm font-bold text-purple-900 mb-4 flex items-center"><Brain className="w-4 h-4 mr-2"/> Publish an Official Note to Class</p>
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          value={noteTitle}
+                          onChange={e => setNoteTitle(e.target.value)}
+                          placeholder="Note Title"
+                          className="w-full p-3 border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 text-sm"
+                        />
+                        <select
+                          value={noteSubject}
+                          onChange={e => setNoteSubject(e.target.value)}
+                          className="w-full p-3 border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 text-sm bg-white"
+                        >
+                          <option value="">Select from your courses...</option>
+                          {[...new Set(classes.map(c => c.subject || c.name))].map((subj, idx) => (
+                            <option key={idx} value={subj}>{subj}</option>
+                          ))}
+                        </select>
+                        <textarea
+                          value={noteContent}
+                          onChange={e => setNoteContent(e.target.value)}
+                          placeholder="Type out the class note based on this doubt..."
+                          rows={5}
+                          className="w-full p-3 border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 resize-none text-sm"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-3 mt-3">
+                        <button onClick={() => setExpandedCreateNote(null)} className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Cancel</button>
+                        <button
+                          onClick={() => handleCreateNoteFromDoubt(doubt)}
+                          disabled={!noteTitle || !noteContent || sending === `note-${doubt._id}`}
+                          className="flex items-center gap-2 bg-purple-600 text-white px-6 py-2 rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors text-sm font-semibold"
+                        >
+                          {sending === `note-${doubt._id}` ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                          Publish Note
                         </button>
                       </div>
                     </div>

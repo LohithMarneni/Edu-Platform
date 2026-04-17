@@ -252,6 +252,25 @@ class ApiService {
     return this.handleResponse(response);
   }
 
+  // Notes endpoints
+  async getNotes(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const url = queryString ? `${this.baseURL}/notes?${queryString}` : `${this.baseURL}/notes`;
+    const response = await fetch(url, {
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse(response);
+  }
+
+  async createNote(noteData) {
+    const response = await fetch(`${this.baseURL}/notes`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(noteData),
+    });
+    return this.handleResponse(response);
+  }
+
   // Collections endpoints
   async getCollections() {
     const response = await fetch(`${this.baseURL}/collections`, {
@@ -533,6 +552,19 @@ class ApiService {
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.message || 'Failed to submit assignment');
+    }
+    return response.json();
+  }
+
+  // Fetch Teacher Notes for a specific class
+  async getStudentNotesFromTeacher(classId) {
+    const ts = Date.now();
+    const response = await fetch(`${this.teacherBaseURL}/student-notes/${classId}?_t=${ts}`, {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to fetch notes from teacher backend');
     }
     return response.json();
   }

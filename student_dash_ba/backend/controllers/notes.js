@@ -94,25 +94,32 @@ exports.getNote = async (req, res, next) => {
 // @access  Private
 exports.createNote = async (req, res, next) => {
   try {
-    const { title, content, doubtId, tags, attachments } = req.body;
+    const { title, content, doubtId, subject, tags, attachments } = req.body;
 
-    // Get doubt details
-    const doubt = await Doubt.findById(doubtId);
-    if (!doubt) {
-      return res.status(404).json({
-        success: false,
-        message: 'Doubt not found'
-      });
+    let doubtData = {};
+    // Get doubt details if doubtId is provided
+    if (doubtId) {
+      const doubt = await Doubt.findById(doubtId);
+      if (!doubt) {
+        return res.status(404).json({
+          success: false,
+          message: 'Doubt not found'
+        });
+      }
+      doubtData = {
+        doubtTitle: doubt.title,
+        doubtDescription: doubt.description,
+        subject: doubt.subject,
+        topic: doubt.topic
+      };
     }
 
     const note = await Note.create({
       title,
       content,
-      doubtId,
-      doubtTitle: doubt.title,
-      doubtDescription: doubt.description,
-      subject: doubt.subject,
-      topic: doubt.topic,
+      doubtId: doubtId || undefined,
+      ...doubtData,
+      subject: doubtData.subject || subject || 'General',
       createdBy: req.user._id,
       tags: tags || [],
       attachments: attachments || []

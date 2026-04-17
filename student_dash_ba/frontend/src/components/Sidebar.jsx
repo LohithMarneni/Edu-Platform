@@ -41,9 +41,8 @@ const Sidebar = ({ isOpen, onClose }) => {
     { icon: QuestionMarkCircleIcon, label: 'Doubt Resolution', path: '/doubts' },
     { icon: ClipboardDocumentListIcon, label: 'Assignments', path: '/assignments' },
     { icon: ChartBarIcon, label: 'Progress', path: '/progress' },
-    { icon: FolderIcon, label: 'My Collection', path: '/collection' },
+    { icon: FolderIcon, label: 'Notes', path: '/notes' },
     { icon: AcademicCapIcon, label: 'Quiz', path: '/quiz' },
-    { icon: UserCircleIcon, label: 'Profile', path: '/profile' },
   ];
 
   return (
@@ -51,76 +50,92 @@ const Sidebar = ({ isOpen, onClose }) => {
       {/* Mobile Overlay */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
         />
       )}
       
       {/* Sidebar */}
       <div className={`
-        fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out
+        fixed lg:static inset-y-0 left-0 z-50 w-72 bg-gradient-to-b from-white to-gray-50/50 border-r border-gray-100 transform transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] shadow-[4px_0_24px_rgba(0,0,0,0.02)]
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         {/* Mobile Close Button */}
         <div className="lg:hidden flex justify-end p-4">
           <button
             onClick={onClose}
-            className="p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100/50 transition-colors"
           >
             <XMarkIcon className="h-6 w-6" />
           </button>
         </div>
         
-      <div className="h-full flex flex-col">
-        {/* Logo Section */}
-        <div className="px-4 py-6 border-b border-gray-200">
-          {location.pathname !== '/' && (
-            <button
-              onClick={handleBackClick}
-              className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
-            >
-              <ArrowLeftIcon className="h-5 w-5" />
-              <span className="text-sm font-medium">Back</span>
-            </button>
-          )}
-          <h1 className="text-xl font-bold text-indigo-600">EduPlatform</h1>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto">
-          <nav className="px-4 py-4 space-y-2">
-            {menuItems.map((item, index) => (
-              <div
-                key={index}
-                onClick={() => navigate(item.path)}
-                className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-all duration-200 ${
-                  location.pathname === item.path
-                    ? 'bg-indigo-50 text-indigo-600 border-r-2 border-indigo-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
+        <div className="h-full flex flex-col">
+          {/* Logo Section */}
+          <div className="px-6 py-8">
+            {location.pathname !== '/' && (
+              <button
+                onClick={handleBackClick}
+                className="flex items-center space-x-2 text-gray-400 hover:text-indigo-600 mb-6 transition-colors group"
               >
-                <item.icon className="h-5 w-5 flex-shrink-0" />
-                <span className="font-medium">{item.label}</span>
+                <ArrowLeftIcon className="h-5 w-5 transform group-hover:-translate-x-1 transition-transform" />
+                <span className="text-sm font-medium">Back</span>
+              </button>
+            )}
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
+                <AcademicCapIcon className="w-6 h-6 text-white" />
               </div>
-            ))}
-          </nav>
-        </div>
-        
-        {/* User Profile Section */}
-        <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center space-x-3">
-            <img
-              src={avatarUrl}
-              alt="Profile"
-              className="w-8 h-8 rounded-full"
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{displayName}</p>
-              <p className="text-xs text-gray-500 truncate">Student</p>
+              <h1 className="text-2xl font-black bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent tracking-tight">
+                EduPlatform
+              </h1>
+            </div>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto custom-scrollbar px-4">
+            <nav className="space-y-1.5 pb-8">
+              {menuItems.map((item, index) => {
+                const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+                return (
+                  <div
+                    key={index}
+                    onClick={() => navigate(item.path)}
+                    className={`flex items-center space-x-3.5 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 group ${
+                      isActive
+                        ? 'bg-gradient-to-br from-indigo-50 to-purple-50/50 text-indigo-700 shadow-sm border border-indigo-100/50'
+                        : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 border border-transparent'
+                    }`}
+                  >
+                    <item.icon className={`h-5 w-5 flex-shrink-0 transition-transform duration-200 ${isActive ? 'scale-110 text-indigo-600' : 'group-hover:scale-110'}`} />
+                    <span className={`text-[15px] ${isActive ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                    {isActive && (
+                      <div className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                    )}
+                  </div>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* User Profile */}
+          <div className="p-4 border-t border-gray-200/60 bg-white">
+            <div 
+              onClick={() => navigate('/profile')}
+              className="flex items-center space-x-3 p-2 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors"
+            >
+              <img
+                src={avatarUrl}
+                alt="Profile"
+                className="w-10 h-10 rounded-full border border-gray-200"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
+                <p className="text-xs text-gray-500 truncate">View Profile</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
     </>
   );
 };

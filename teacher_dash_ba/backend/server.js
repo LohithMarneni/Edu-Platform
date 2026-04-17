@@ -29,7 +29,12 @@ const app = express();
 const httpServer = http.createServer(app);
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  frameguard: false
+}));
 app.use(compression());
 
 // Rate limiting
@@ -169,6 +174,8 @@ app.use('/api/standalone-quizzes', require('./routes/standaloneQuizzes'));
 app.use('/api/student-quizzes', require('./routes/studentQuizzes'));
 app.use('/api/content/student', studentContentRoutes);
 app.use('/api/content', protect, authorize('teacher'), contentRoutes);
+app.use('/api/teacher-notes', protect, authorize('teacher'), require('./routes/teacherNotes'));
+app.use('/api/student-notes', require('./routes/studentNotes'));
 app.use('/api/dashboard', protect, authorize('teacher'), dashboardRoutes);
 
 // 404 handler

@@ -29,7 +29,12 @@ const { protect, authorize } = require('./middleware/auth');
 const app = express();
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  frameguard: false
+}));
 app.use(compression());
 
 // CORS configuration (must be BEFORE rate limiter to set headers on preflight)

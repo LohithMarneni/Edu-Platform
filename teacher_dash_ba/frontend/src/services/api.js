@@ -5,6 +5,40 @@ class ApiService {
     this.baseURL = API_BASE_URL;
   }
 
+  // Generic HTTP methods
+  async get(endpoint) {
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse(response);
+  }
+
+  async post(endpoint, data) {
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse(response);
+  }
+
+  async put(endpoint, data) {
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse(response);
+  }
+
+  async delete(endpoint) {
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse(response);
+  }
+
   // Helper method to get auth headers
   getAuthHeaders() {
     const token = localStorage.getItem('token');
@@ -62,6 +96,7 @@ class ApiService {
     }
     return response.json();
   }
+
 
   // Auth endpoints
   async login(email, password) {

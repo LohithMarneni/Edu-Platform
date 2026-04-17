@@ -14,16 +14,13 @@ const noteSchema = new mongoose.Schema({
   },
   doubtId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Doubt',
-    required: true
+    ref: 'Doubt'
   },
   doubtTitle: {
-    type: String,
-    required: true
+    type: String
   },
   doubtDescription: {
-    type: String,
-    required: true
+    type: String
   },
   subject: {
     type: String,

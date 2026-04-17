@@ -196,22 +196,7 @@ const Courses = () => {
               <h3 className="text-xl font-semibold text-gray-900 mb-2">{course.name}</h3>
               <p className="text-gray-600 text-sm mb-4">{course.description}</p>
               
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Progress</span>
-                  <span className="font-medium">{progress}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  ></div>
-                </div>
-                <div className="flex justify-between text-sm text-gray-600">
-                  <span>{completedLessons} / {totalLessons} lessons</span>
-                  <span>{totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0}% completed</span>
-                </div>
-              </div>
+              {/* Progress removed as per user request */}
             </div>
           );
         })}
@@ -245,22 +230,7 @@ const Courses = () => {
           </div>
         </div>
 
-        <div className={`${course.color} border ${course.borderColor} rounded-xl p-6`}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-indigo-600">{progress}%</div>
-              <div className="text-sm text-gray-600">Overall Progress</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{completedLessons}</div>
-              <div className="text-sm text-gray-600">Lessons Completed</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">{totalLessons - completedLessons}</div>
-              <div className="text-sm text-gray-600">Lessons Remaining</div>
-            </div>
-          </div>
-        </div>
+        {/* Progress stats removed as per user request */}
 
         {/* Unified Course Content View */}
         <CourseMaterials

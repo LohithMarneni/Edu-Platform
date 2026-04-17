@@ -11,6 +11,7 @@ import ClassContent from './components/ClassContent';
 import Doubts from './pages/Doubts';
 import Settings from './pages/Settings';
 import TeacherQuiz from './pages/Quiz';
+import TeacherNotes from './pages/TeacherNotes';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -97,6 +98,7 @@ function App() {
           <Route path="/classes" element={<Classes />} />
           <Route path="/classes/:classId/*" element={<ClassDetail />} />
           <Route path="/assignments" element={<Assignments />} />
+          <Route path="/notes" element={<TeacherNotes />} />
           <Route path="/content" element={<ClassContent />} />
           <Route path="/doubts" element={<Doubts />} />
           <Route path="/quiz" element={<TeacherQuiz />} />

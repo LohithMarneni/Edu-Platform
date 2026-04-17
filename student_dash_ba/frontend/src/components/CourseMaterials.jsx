@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import apiService from '../services/api';
 import {
   DocumentTextIcon,
@@ -243,7 +244,6 @@ const CourseMaterials = ({ course, onCountChange, navigateToResource }) => {
     
     console.log('🔄 CourseMaterials useEffect triggered:', {
       currentCourseId,
-      previousCourseId: courseIdRef.current,
       hasCourse: !!course,
       courseName: course?.name
     });
@@ -253,32 +253,20 @@ const CourseMaterials = ({ course, onCountChange, navigateToResource }) => {
       setTeacherContent([]);
       onCountChange?.(0);
       setLoading(false); // Make sure to stop loading if no course
-      courseIdRef.current = null;
-      return;
-    }
-    
-    // Skip if we already fetched for this course
-    if (courseIdRef.current === currentCourseId) {
-      console.log('✅ Already fetched for this course, skipping');
-      setLoading(false); // Already loaded, stop loading spinner
       return;
     }
     
     console.log('🚀 Starting to fetch content for course:', currentCourseId);
-    courseIdRef.current = currentCourseId;
     setTeacherContent([]);
     onCountChange?.(0);
     setLoading(true); // Start loading
     
-    // Use a small delay to debounce rapid course changes
-    const timeoutId = setTimeout(() => {
-      console.log('⏰ Timeout triggered, calling fetchContent');
-      fetchContent(false).catch(err => {
-        console.error('❌ fetchContent error in useEffect:', err);
-        setLoading(false);
-        setError(err.message || 'Failed to fetch materials');
-      });
-    }, 100);
+    // Fetch directly without setTimeout to avoid StrictMode cancellation issues
+    fetchContent(false).catch(err => {
+      console.error('❌ fetchContent error in useEffect:', err);
+      setLoading(false);
+      setError(err.message || 'Failed to fetch materials');
+    });
     
     // Safety timeout - if fetch takes too long, stop loading after 30 seconds
     const safetyTimeout = setTimeout(() => {
@@ -291,8 +279,9 @@ const CourseMaterials = ({ course, onCountChange, navigateToResource }) => {
     }, 30000);
     
     return () => {
-      clearTimeout(timeoutId);
       clearTimeout(safetyTimeout);
+      // In Strict Mode, if unmounted, allow next mount to fetch
+      fetchingRef.current = false;
     };
   }, [course?._id?.toString()]); // Only depend on course ID - fetchContent is stable via useCallback
 
@@ -332,15 +321,23 @@ const CourseMaterials = ({ course, onCountChange, navigateToResource }) => {
     }
   }, []);
 
+  const navigate = useNavigate();
+
   const handleContentClick = useCallback((item) => {
     if (item.type === 'link' && item.link?.url) {
       window.open(item.link.url, '_blank');
     } else if (item.file?.url || item.file?.path) {
       const rawUrl = item.file.url || item.file.path;
       const fileUrl = rawUrl.startsWith('http') ? rawUrl : `http://localhost:5001${rawUrl}`;
-      window.open(fileUrl, '_blank');
+      if (['pdf', 'document', 'image', 'audio', 'video'].includes(item.type)) {
+        const subject = course?.category || course?.subject || course?.name || 'Study Material';
+        // Open inside the inline document viewer using React Router
+        navigate(`/courses/document?fileUrl=${encodeURIComponent(fileUrl)}&title=${encodeURIComponent(item.title)}&subject=${encodeURIComponent(subject)}`);
+      } else {
+        window.open(fileUrl, '_blank');
+      }
     }
-  }, []);
+  }, [course, navigate]);
 
   const organizedChapters = useMemo(() => {
     const chaptersMap = new Map();

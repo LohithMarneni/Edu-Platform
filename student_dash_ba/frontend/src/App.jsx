@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
@@ -10,9 +10,10 @@ import Courses from './components/Courses';
 import VideoPlayer from './components/VideoPlayer';
 import Assignments from './components/Assignments';
 import AssignmentDetail from './components/AssignmentDetail';
+import DocumentViewer from './components/DocumentViewer';
 import Progress from './components/Progress';
 import DoubtResolution from './components/DoubtResolution';
-import MyCollection from './components/MyCollection';
+import Notes from './components/Notes';
 import Quiz from './components/Quiz';
 import { MagnifyingGlassIcon, BellIcon } from '@heroicons/react/24/outline';
 
@@ -21,13 +22,19 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Derive the logged-in user's display name for the top-bar avatar
   const getAvatarUrl = () => {
     try {
       const u = JSON.parse(localStorage.getItem('user') || '{}');
       const name = u.fullName || u.name || u.email || 'Student';
       return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4f46e5&color=fff&size=32`;
     } catch { return 'https://ui-avatars.com/api/?name=Student&background=4f46e5&color=fff&size=32'; }
+  };
+
+  const getUserName = () => {
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}');
+      return u.fullName || u.name || 'Student';
+    } catch { return 'Student'; }
   };
 
   useEffect(() => {
@@ -139,16 +146,11 @@ function App() {
                   />
                 </div>
               </div>
-              <div className="flex items-center space-x-4 ml-6">
-                <button className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
-                  <BellIcon className="h-6 w-6 text-gray-600" />
-                  <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+              <div className="flex items-center space-x-6 ml-6">
+                <button className="relative p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500 hover:text-indigo-600">
+                  <BellIcon className="h-6 w-6" />
+                  <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 bg-red-500 border-2 border-white rounded-full"></span>
                 </button>
-                <img
-                  src={getAvatarUrl()}
-                  alt="Profile"
-                  className="h-8 w-8 rounded-full border-2 border-indigo-200"
-                />
               </div>
             </div>
           </div>
@@ -160,11 +162,12 @@ function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/courses" element={<Courses />} />
             <Route path="/courses/topic/:topicId/video" element={<VideoPlayer />} />
+            <Route path="/courses/document" element={<DocumentViewer />} />
             <Route path="/assignments" element={<Assignments />} />
             <Route path="/assignment/:assignmentId" element={<AssignmentDetail />} />
             <Route path="/progress" element={<Progress />} />
             <Route path="/doubts" element={<DoubtResolution />} />
-            <Route path="/collection" element={<MyCollection />} />
+            <Route path="/notes" element={<Notes />} />
             <Route path="/quiz" element={<Quiz />} />
           </Routes>
           </div>
